@@ -64,6 +64,7 @@ RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS products_updated_at ON public.products;
 CREATE TRIGGER products_updated_at
   BEFORE UPDATE ON public.products
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -93,6 +94,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
@@ -143,6 +145,7 @@ CREATE TABLE IF NOT EXISTS public.orders (
 CREATE INDEX IF NOT EXISTS orders_user_idx ON public.orders(user_id);
 CREATE INDEX IF NOT EXISTS orders_status_idx ON public.orders(status);
 
+DROP TRIGGER IF EXISTS orders_updated_at ON public.orders;
 CREATE TRIGGER orders_updated_at
   BEFORE UPDATE ON public.orders
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
@@ -157,6 +160,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS set_order_number ON public.orders;
 CREATE TRIGGER set_order_number
   BEFORE INSERT ON public.orders
   FOR EACH ROW WHEN (NEW.order_number IS NULL OR NEW.order_number = '')
@@ -178,29 +182,37 @@ CREATE TABLE IF NOT EXISTS public.fcm_tokens (
 
 -- Products: anyone can read active products
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "products_public_read" ON public.products;
 CREATE POLICY "products_public_read" ON public.products FOR SELECT USING (is_active = TRUE);
 
 -- Categories: public read
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "categories_public_read" ON public.categories;
 CREATE POLICY "categories_public_read" ON public.categories FOR SELECT USING (TRUE);
 
 -- Profiles: users can only read/write their own
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "profiles_own" ON public.profiles;
 CREATE POLICY "profiles_own" ON public.profiles USING (auth.uid() = id);
 
 -- Wishlist: users manage their own
 ALTER TABLE public.wishlists ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "wishlist_own" ON public.wishlists;
 CREATE POLICY "wishlist_own" ON public.wishlists USING (auth.uid() = user_id);
 
 -- Addresses: users manage their own
 ALTER TABLE public.addresses ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "addresses_own" ON public.addresses;
 CREATE POLICY "addresses_own" ON public.addresses USING (auth.uid() = user_id);
 
 -- Orders: users see only their own orders
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "orders_own_read" ON public.orders;
 CREATE POLICY "orders_own_read" ON public.orders FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "orders_own_insert" ON public.orders;
 CREATE POLICY "orders_own_insert" ON public.orders FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- FCM tokens: own
 ALTER TABLE public.fcm_tokens ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "fcm_tokens_own" ON public.fcm_tokens;
 CREATE POLICY "fcm_tokens_own" ON public.fcm_tokens USING (auth.uid() = user_id);
