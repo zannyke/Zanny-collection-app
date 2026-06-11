@@ -184,7 +184,7 @@ class _PremiumSpinnerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint()
-      ..color = color.withOpacity(0.15)
+      ..color = color.withValues(opacity: 0.15)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
