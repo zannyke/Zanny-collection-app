@@ -6,6 +6,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../shared/widgets/animations.dart';
+
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -210,72 +212,70 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.push('/collections/${category.slug}'),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border, width: 0.5),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Category image
-            Container(
-              color: AppColors.surfaceElevated,
-              child: category.imageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: category.imageUrl,
-                      fit: BoxFit.cover,
-                      placeholder: (context, url) => const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+    return FadeInSlide(
+      child: TactileButton(
+        onTap: () => context.push('/collections/${category.slug}'),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.border, width: 0.5),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Category image
+              Container(
+                color: AppColors.surfaceElevated,
+                child: category.imageUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: category.imageUrl,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => const Center(
+                          child: ZannyLoadingIndicator(
+                            size: 20,
                             color: AppColors.textSecondary,
                           ),
                         ),
-                      ),
-                      errorWidget: (context, url, error) => const Center(
+                        errorWidget: (context, url, error) => const Center(
+                          child: Icon(Icons.image_outlined,
+                              color: AppColors.textMuted, size: 32),
+                        ),
+                      )
+                    : const Center(
                         child: Icon(Icons.image_outlined,
                             color: AppColors.textMuted, size: 32),
                       ),
-                    )
-                  : const Center(
-                      child: Icon(Icons.image_outlined,
-                          color: AppColors.textMuted, size: 32),
+              ),
+              // Bottom gradient + label
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        AppColors.background.withOpacity(0.9),
+                      ],
                     ),
-            ),
-            // Bottom gradient + label
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      AppColors.background.withOpacity(0.9),
-                    ],
                   ),
-                ),
-                child: Text(
-                  category.name.toUpperCase(),
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5,
-                    color: AppColors.textPrimary,
+                  child: Text(
+                    category.name.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

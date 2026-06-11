@@ -13,7 +13,9 @@ class CartNotifier extends Notifier<List<CartItem>> {
     final existing = state.indexWhere((i) => i.key == key);
     if (existing >= 0) {
       final updated = List<CartItem>.from(state);
-      updated[existing].quantity += qty;
+      updated[existing] = updated[existing].copyWith(
+        quantity: updated[existing].quantity + qty,
+      );
       state = updated;
     } else {
       state = [...state, CartItem(product: product, selectedColor: color, selectedSize: size, quantity: qty)];
@@ -29,7 +31,7 @@ class CartNotifier extends Notifier<List<CartItem>> {
       removeItem(key);
       return;
     }
-    state = state.map((i) => i.key == key ? (i..quantity = qty) : i).toList();
+    state = state.map((i) => i.key == key ? i.copyWith(quantity: qty) : i).toList();
   }
 
   void clear() => state = [];

@@ -6,6 +6,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/product_provider.dart';
+import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
+
 
 class CategoryScreen extends ConsumerStatefulWidget {
   final String slug;
@@ -115,9 +118,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
           // Product Grid Content
           Expanded(
             child: productsAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.textPrimary),
-              ),
+              loading: () => const ProductGridShimmer(),
               error: (err, stack) => Center(
                 child: Text(
                   'Error loading products: $err',
@@ -237,12 +238,13 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.push('/product/${product.id}'),
-      child: Container(
-        color: AppColors.surface,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return FadeInSlide(
+      child: TactileButton(
+        onTap: () => context.push('/product/${product.id}'),
+        child: Container(
+          color: AppColors.surface,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image area
             Expanded(
@@ -261,8 +263,8 @@ class _ProductCard extends StatelessWidget {
                                 child: SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
+                                  child: ZannyLoadingIndicator(
+                                    size: 20,
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -366,6 +368,6 @@ class _ProductCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),);
   }
 }

@@ -134,9 +134,9 @@ class CartItem {
   final Product product;
   final String selectedColor;
   final String selectedSize;
-  int quantity;
+  final int quantity;
 
-  CartItem({
+  const CartItem({
     required this.product,
     required this.selectedColor,
     required this.selectedSize,
@@ -146,4 +146,18 @@ class CartItem {
   double get subtotal => product.price * quantity;
 
   String get key => '${product.id}_${selectedColor}_$selectedSize';
+
+  CartItem copyWith({
+    Product? product,
+    String? selectedColor,
+    String? selectedSize,
+    int? quantity,
+  }) {
+    return CartItem(
+      product: product ?? this.product,
+      selectedColor: selectedColor ?? this.selectedColor,
+      selectedSize: selectedSize ?? this.selectedSize,
+      quantity: quantity ?? this.quantity,
+    );
+  }
 }

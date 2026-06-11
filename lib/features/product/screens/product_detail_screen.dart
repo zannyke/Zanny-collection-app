@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
 import '../../../shared/providers/product_provider.dart';
+import '../../../shared/widgets/animations.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
@@ -79,7 +80,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
       ),
       body: productAsync.when(
         loading: () => const Center(
-          child: CircularProgressIndicator(color: AppColors.textPrimary),
+          child: ZannyLoadingIndicator(size: 32, color: AppColors.textPrimary),
         ),
         error: (err, stack) => Center(
           child: Text(
@@ -124,7 +125,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 width: double.infinity,
                                 height: double.infinity,
                                 placeholder: (context, url) => const Center(
-                                  child: CircularProgressIndicator(
+                                  child: ZannyLoadingIndicator(
+                                    size: 24,
                                     color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -242,7 +244,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           spacing: 10,
                           children: product.colors.map((color) {
                             final isSelected = _selectedColor == color;
-                            return GestureDetector(
+                            return TactileButton(
                               onTap: () => setState(() => _selectedColor = color),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -308,7 +310,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           runSpacing: 8,
                           children: product.sizes.map((size) {
                             final isSelected = _selectedSize == size;
-                            return GestureDetector(
+                            return TactileButton(
                               onTap: () => setState(() => _selectedSize = size),
                               child: Container(
                                 width: 48,
@@ -401,30 +403,18 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                         ),
 
-                      ElevatedButton(
+                      PremiumButton(
                         onPressed: () => _addToCart(product),
-                        child: Text(
-                          _addedToCart ? 'ADDED TO CART ✓' : 'ADD TO CART',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2,
-                          ),
-                        ),
+                        text: _addedToCart ? 'ADDED TO CART ✓' : 'ADD TO CART',
+                        type: PremiumButtonType.primary,
                       ),
 
                       const SizedBox(height: 12),
 
-                      OutlinedButton(
+                      PremiumButton(
                         onPressed: () => context.push('/cart'),
-                        child: Text(
-                          'VIEW CART',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 2,
-                          ),
-                        ),
+                        text: 'VIEW CART',
+                        type: PremiumButtonType.secondary,
                       ),
 
                       const SizedBox(height: 28),
@@ -470,7 +460,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         return relatedAsync.when(
                           loading: () => const SizedBox(
                             height: 150,
-                            child: Center(child: CircularProgressIndicator(color: AppColors.textPrimary)),
+                            child: Center(child: ZannyLoadingIndicator(size: 24, color: AppColors.textPrimary)),
                           ),
                           error: (err, stack) => const SizedBox(),
                           data: (list) {
@@ -482,15 +472,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 itemCount: list.length,
                                 itemBuilder: (context, index) {
                                   final item = list[index];
-                                  return GestureDetector(
-                                    onTap: () {
-                                      // Navigate to related product page (pushReplacement to keep stack neat)
-                                      context.pushReplacement('/product/${item.id}');
-                                    },
-                                    child: Container(
-                                      width: 140,
-                                      margin: const EdgeInsets.only(right: 12),
-                                      color: AppColors.surface,
+                                  return FadeInSlide(
+                                    delay: Duration(milliseconds: index * 50),
+                                    child: TactileButton(
+                                      onTap: () {
+                                        context.pushReplacement('/product/${item.id}');
+                                      },
+                                      child: Container(
+                                        width: 140,
+                                        margin: const EdgeInsets.only(right: 12),
+                                        color: AppColors.surface,
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
@@ -502,13 +493,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                                       imageUrl: item.images.first,
                                                       fit: BoxFit.cover,
                                                       placeholder: (context, url) => const Center(
-                                                        child: SizedBox(
-                                                          width: 16,
-                                                          height: 16,
-                                                          child: CircularProgressIndicator(
-                                                            strokeWidth: 2,
-                                                            color: AppColors.textSecondary,
-                                                          ),
+                                                        child: ZannyLoadingIndicator(
+                                                          size: 16,
+                                                          color: AppColors.textSecondary,
                                                         ),
                                                       ),
                                                       errorWidget: (context, url, error) => const Icon(
@@ -556,7 +543,8 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                         ],
                                       ),
                                     ),
-                                  );
+                                  ),
+                                );
                                 },
                               ),
                             );
@@ -669,7 +657,7 @@ class _QuantityButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TactileButton(
       onTap: onTap,
       child: Container(
         width: 44,

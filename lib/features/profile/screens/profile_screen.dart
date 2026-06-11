@@ -7,6 +7,7 @@ import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/providers/wishlist_provider.dart';
 import '../../../shared/providers/cart_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../shared/widgets/animations.dart';
 
 
 class ProfileScreen extends ConsumerWidget {
@@ -83,16 +84,20 @@ class ProfileScreen extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: ElevatedButton(
+                          child: PremiumButton(
                             onPressed: () => context.push('/login'),
-                            child: Text('SIGN IN', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
+                            text: 'SIGN IN',
+                            type: PremiumButtonType.primary,
+                            height: 48,
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: OutlinedButton(
+                          child: PremiumButton(
                             onPressed: () => context.push('/register'),
-                            child: Text('REGISTER', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
+                            text: 'REGISTER',
+                            type: PremiumButtonType.secondary,
+                            height: 48,
                           ),
                         ),
                       ],

@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../shared/widgets/animations.dart';
 
 
 class CartScreen extends ConsumerWidget {
@@ -73,13 +74,9 @@ class _CartItemTile extends ConsumerWidget {
                     imageUrl: item.product.images.first,
                     fit: BoxFit.cover,
                     placeholder: (context, url) => const Center(
-                      child: SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.textSecondary,
-                        ),
+                      child: ZannyLoadingIndicator(
+                        size: 16,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     errorWidget: (context, url, error) => const Center(
@@ -177,7 +174,7 @@ class _SmallQtyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return TactileButton(
       onTap: onTap,
       child: Container(
         width: 32,
@@ -230,7 +227,7 @@ class _OrderSummary extends StatelessWidget {
             bold: true,
           ),
           const SizedBox(height: 16),
-          ElevatedButton(
+          PremiumButton(
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -239,11 +236,8 @@ class _OrderSummary extends StatelessWidget {
                 ),
               );
             },
-            child: Text(
-              'PROCEED TO CHECKOUT',
-              style: GoogleFonts.inter(
-                  fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2),
-            ),
+            text: 'PROCEED TO CHECKOUT',
+            type: PremiumButtonType.primary,
           ),
         ],
       ),
@@ -299,12 +293,11 @@ class _EmptyCart extends StatelessWidget {
                 fontSize: 13, color: AppColors.textMuted),
           ),
           const SizedBox(height: 24),
-          SizedBox(
+          PremiumButton(
+            onPressed: () => context.go('/collections'),
+            text: 'SHOP NOW',
+            type: PremiumButtonType.primary,
             width: 200,
-            child: ElevatedButton(
-              onPressed: () => context.go('/collections'),
-              child: const Text('SHOP NOW'),
-            ),
           ),
         ],
       ),

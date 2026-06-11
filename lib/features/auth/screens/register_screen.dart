@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/animations.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -109,18 +110,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               }),
               const SizedBox(height: 28),
 
-              ElevatedButton(
-                onPressed: _isLoading ? null : _submit,
-                child: _isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background),
-                      )
-                    : Text(
-                        'CREATE ACCOUNT',
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2),
-                      ),
+              PremiumButton(
+                text: 'CREATE ACCOUNT',
+                onPressed: _submit,
+                isLoading: _isLoading,
+                type: PremiumButtonType.primary,
               ),
               const SizedBox(height: 16),
 
@@ -136,13 +130,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
 
-              OutlinedButton.icon(
+              PremiumButton(
+                text: 'SIGN UP WITH GOOGLE',
                 onPressed: () {},
-                icon: const Icon(Icons.g_mobiledata, size: 22),
-                label: Text(
-                  'SIGN UP WITH GOOGLE',
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.5),
-                ),
+                isLoading: _isLoading,
+                type: PremiumButtonType.secondary,
+                icon: Icons.g_mobiledata,
               ),
               const SizedBox(height: 28),
 

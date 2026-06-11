@@ -8,6 +8,7 @@ import '../../../shared/providers/wishlist_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/shimmer_widgets.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../shared/widgets/animations.dart';
 
 class WishlistScreen extends ConsumerWidget {
   const WishlistScreen({super.key});
@@ -96,10 +97,11 @@ class _WishlistCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () => context.push('/product/${product.id}'),
-      child: Container(
-        color: AppColors.surface,
+    return FadeInSlide(
+      child: TactileButton(
+        onTap: () => context.push('/product/${product.id}'),
+        child: Container(
+          color: AppColors.surface,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -112,17 +114,10 @@ class _WishlistCard extends ConsumerWidget {
                       ? CachedNetworkImage(
                           imageUrl: product.images.first,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: AppColors.surfaceElevated,
-                            child: const Center(
-                              child: SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
+                          placeholder: (context, url) => const Center(
+                            child: ZannyLoadingIndicator(
+                              size: 20,
+                              color: AppColors.textSecondary,
                             ),
                           ),
                           errorWidget: (context, url, error) => const Center(
@@ -211,7 +206,7 @@ class _WishlistCard extends ConsumerWidget {
           ],
         ),
       ),
-    );
+    ),);
   }
 }
 
@@ -237,13 +232,11 @@ class _EmptyWishlist extends StatelessWidget {
             Text('Save pieces you love and find them easily later.',
                 style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary), textAlign: TextAlign.center),
             const SizedBox(height: 28),
-            SizedBox(
+            PremiumButton(
+              text: 'START SHOPPING',
+              onPressed: () => context.go('/collections'),
+              type: PremiumButtonType.primary,
               width: 200,
-              child: ElevatedButton(
-                onPressed: () => context.go('/collections'),
-                child: Text('START SHOPPING',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
-              ),
             ),
           ],
         ),
@@ -277,13 +270,11 @@ class _SignInPrompt extends StatelessWidget {
               Text('Save your favourite pieces across devices.',
                   style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary), textAlign: TextAlign.center),
               const SizedBox(height: 28),
-              SizedBox(
+              PremiumButton(
+                text: 'SIGN IN',
+                onPressed: () => context.push('/login'),
+                type: PremiumButtonType.primary,
                 width: 200,
-                child: ElevatedButton(
-                  onPressed: () => context.push('/login'),
-                  child: Text('SIGN IN',
-                      style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2)),
-                ),
               ),
               const SizedBox(height: 12),
               TextButton(

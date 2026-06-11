@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/product_provider.dart';
+import '../../../shared/widgets/animations.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -76,7 +77,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             Expanded(
               child: searchAsync.when(
                 loading: () => const Center(
-                  child: CircularProgressIndicator(color: AppColors.textPrimary),
+                  child: ZannyLoadingIndicator(size: 32, color: AppColors.textPrimary),
                 ),
                 error: (err, stack) => Center(
                   child: Text(
@@ -126,7 +127,7 @@ class _SearchSuggestions extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: categories.map((cat) => GestureDetector(
+            children: categories.map((cat) => TactileButton(
               onTap: () => context.push('/collections/${cat.slug}'),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -153,10 +154,11 @@ class _SearchResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.push('/product/${product.id}'),
-      child: Container(
-        color: AppColors.surface,
+    return FadeInSlide(
+      child: TactileButton(
+        onTap: () => context.push('/product/${product.id}'),
+        child: Container(
+          color: AppColors.surface,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -170,13 +172,9 @@ class _SearchResultCard extends StatelessWidget {
                         width: double.infinity,
                         height: double.infinity,
                         placeholder: (context, url) => const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.textSecondary,
-                            ),
+                          child: ZannyLoadingIndicator(
+                            size: 16,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                         errorWidget: (context, url, error) => const Center(
@@ -205,7 +203,7 @@ class _SearchResultCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),);
   }
 }
 

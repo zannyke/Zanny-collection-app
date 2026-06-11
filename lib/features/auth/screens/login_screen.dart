@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/providers/auth_provider.dart';
+import '../../../shared/widgets/animations.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -132,13 +133,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 20),
 
               // ── Sign In Button ───────────────────────────────────────────────
-              ElevatedButton(
-                onPressed: authState.isLoading ? null : _submit,
-                child: authState.isLoading
-                    ? const SizedBox(width: 20, height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background))
-                    : Text('SIGN IN',
-                        style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2)),
+              PremiumButton(
+                text: 'SIGN IN',
+                onPressed: _submit,
+                isLoading: authState.isLoading,
+                type: PremiumButtonType.primary,
               ),
               const SizedBox(height: 20),
 
@@ -156,13 +155,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 20),
 
               // ── Google Sign In ───────────────────────────────────────────────
-              OutlinedButton.icon(
-                onPressed: authState.isLoading
-                    ? null
-                    : () => ref.read(authProvider.notifier).signInWithGoogle(),
-                icon: const Icon(Icons.g_mobiledata, size: 24),
-                label: Text('CONTINUE WITH GOOGLE',
-                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
+              PremiumButton(
+                text: 'CONTINUE WITH GOOGLE',
+                onPressed: () => ref.read(authProvider.notifier).signInWithGoogle(),
+                isLoading: authState.isLoading,
+                type: PremiumButtonType.secondary,
+                icon: Icons.g_mobiledata,
               ),
               const SizedBox(height: 36),
 
@@ -223,7 +221,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               decoration: const InputDecoration(hintText: 'your@email.com'),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
+            PremiumButton(
+              text: 'SEND RESET LINK',
               onPressed: () {
                 ref.read(authProvider.notifier).resetPassword(emailCtrl.text.trim());
                 Navigator.pop(context);
@@ -231,8 +230,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SnackBar(content: Text('Reset link sent! Check your email.'), behavior: SnackBarBehavior.floating),
                 );
               },
-              child: Text('SEND RESET LINK',
-                  style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2)),
             ),
           ],
         ),

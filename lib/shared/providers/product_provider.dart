@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../supabase/supabase_config.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../models/models.dart';
 
 // ── Product Repository ────────────────────────────────────────────────────────
@@ -19,22 +19,23 @@ class ProductRepository {
       return _getMockByCategory(slug, sort);
     }
     try {
-      var query = _client
+      final baseQuery = _client
           .from('products')
           .select()
           .eq('category_slug', slug)
           .eq('is_active', true);
 
+      PostgrestTransformBuilder<PostgrestList> query;
       // Apply sort
       switch (sort) {
         case 'price_asc':
-          query = query.order('price', ascending: true);
+          query = baseQuery.order('price', ascending: true);
         case 'price_desc':
-          query = query.order('price', ascending: false);
+          query = baseQuery.order('price', ascending: false);
         case 'newest':
-          query = query.order('created_at', ascending: false);
+          query = baseQuery.order('created_at', ascending: false);
         default:
-          query = query.order('is_new', ascending: false);
+          query = baseQuery.order('is_new', ascending: false);
       }
 
       final data = await query;

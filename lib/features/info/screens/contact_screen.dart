@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/animations.dart';
 
 class ContactScreen extends StatefulWidget {
   const ContactScreen({super.key});
@@ -79,7 +80,7 @@ class _ContactScreenState extends State<ContactScreen> {
             ),
             child: Column(
               children: [
-                _ContactRow(Icons.whatsapp, 'WhatsApp', '+254 700 000 000'),
+                _ContactRow(Icons.chat_bubble_outline, 'WhatsApp', '+254 700 000 000'),
                 const Divider(color: AppColors.border, height: 20),
                 _ContactRow(Icons.mail_outline, 'Email', 'hello@zannycollection.com'),
                 const Divider(color: AppColors.border, height: 20),
@@ -135,17 +136,11 @@ class _ContactScreenState extends State<ContactScreen> {
           ),
           const SizedBox(height: 28),
 
-          ElevatedButton(
+          PremiumButton(
             onPressed: _loading ? null : _submit,
-            child: _loading
-                ? const SizedBox(
-                    width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background),
-                  )
-                : Text(
-                    'SEND MESSAGE',
-                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 2),
-                  ),
+            isLoading: _loading,
+            text: 'SEND MESSAGE',
+            type: PremiumButtonType.primary,
           ),
           const SizedBox(height: 40),
         ],
@@ -213,12 +208,11 @@ class _SentConfirmation extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          SizedBox(
+          PremiumButton(
+            onPressed: () => context.pop(),
+            text: 'BACK',
+            type: PremiumButtonType.secondary,
             width: 180,
-            child: OutlinedButton(
-              onPressed: () => context.pop(),
-              child: Text('BACK', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
-            ),
           ),
         ],
       ),

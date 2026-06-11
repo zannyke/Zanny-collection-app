@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../shared/widgets/animations.dart';
 
 class CollectionsScreen extends StatelessWidget {
   const CollectionsScreen({super.key});
@@ -62,13 +63,14 @@ class _BigCategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.push('/collections/${category.slug}'),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          border: Border.all(color: AppColors.border, width: 0.5),
-        ),
+    return FadeInSlide(
+      child: TactileButton(
+        onTap: () => context.push('/collections/${category.slug}'),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.border, width: 0.5),
+          ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -80,13 +82,9 @@ class _BigCategoryCard extends StatelessWidget {
                         imageUrl: category.imageUrl,
                         fit: BoxFit.cover,
                         placeholder: (context, url) => const Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.textSecondary,
-                            ),
+                          child: ZannyLoadingIndicator(
+                            size: 20,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                         errorWidget: (context, url, error) => const Center(
@@ -128,6 +126,6 @@ class _BigCategoryCard extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),);
   }
 }

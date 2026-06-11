@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
-
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../../shared/widgets/animations.dart';
 
 class WorldOfZannyScreen extends StatelessWidget {
   const WorldOfZannyScreen({super.key});
@@ -29,13 +29,9 @@ class WorldOfZannyScreen extends StatelessWidget {
                 imageUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800',
                 fit: BoxFit.cover,
                 placeholder: (context, url) => const Center(
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.textSecondary,
-                    ),
+                  child: ZannyLoadingIndicator(
+                    size: 28,
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 errorWidget: (context, url, error) => const Center(

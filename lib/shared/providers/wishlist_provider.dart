@@ -1,9 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../supabase/supabase_config.dart';
+import '../../core/supabase/supabase_config.dart';
 import '../models/models.dart';
 import 'auth_provider.dart';
-import 'product_provider.dart';
 
 // ── Wishlist Notifier ─────────────────────────────────────────────────────────
 
@@ -33,7 +32,6 @@ class WishlistNotifier extends AsyncNotifier<List<Product>> {
         .select('product_id, products(*)')
         .eq('user_id', userId);
 
-    final repo = ref.read(productRepositoryProvider);
     return (data as List)
         .where((row) => row['products'] != null)
         .map((row) => Product.fromJson(

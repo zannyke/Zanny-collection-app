@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../supabase/supabase_config.dart';
-import '../services/notification_service.dart';
+import '../../core/supabase/supabase_config.dart';
+import '../../core/services/notification_service.dart';
 
 // ── Auth State ────────────────────────────────────────────────────────────────
 
