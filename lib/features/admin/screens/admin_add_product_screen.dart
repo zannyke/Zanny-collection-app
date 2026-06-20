@@ -48,11 +48,13 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
   };
   final List<String> _customColors = [];
   final _customColorController = TextEditingController();
+  final _pushBodyController = TextEditingController();
 
   String? _selectedCategory;
   bool _isNew = false;
   bool _isSale = false;
   bool _isLoading = false;
+  bool _sendPushNotification = false;
 
   final List<String> _existingImageUrls = [];
   final List<File> _selectedImages = [];
@@ -117,6 +119,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
     _originalPriceController.dispose();
     _stockController.dispose();
     _customColorController.dispose();
+    _pushBodyController.dispose();
     super.dispose();
   }
 
@@ -234,7 +237,11 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
       if (widget.product != null) {
         await ref.read(productsStateProvider.notifier).updateProduct(product);
       } else {
-        await ref.read(productsStateProvider.notifier).addProduct(product);
+        await ref.read(productsStateProvider.notifier).addProduct(
+          product,
+          sendPush: _sendPushNotification,
+          pushBody: _pushBodyController.text.trim().isNotEmpty ? _pushBodyController.text.trim() : null,
+        );
       }
 
       if (mounted) {
@@ -819,6 +826,38 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
                       ),
                     ],
                   ),
+                  if (widget.product == null) ...[
+                    const SizedBox(height: 20),
+                    _buildSectionTitle('ADVERTISE PRODUCT'),
+                    CheckboxListTile(
+                      title: Text(
+                        'Advertise this product by sending a push notification',
+                        style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
+                      ),
+                      subtitle: Text(
+                        'Sends a system-level alert to all registered users',
+                        style: TextStyle(color: theme.colorScheme.secondary, fontSize: 11),
+                      ),
+                      value: _sendPushNotification,
+                      activeColor: theme.colorScheme.primary,
+                      checkColor: theme.colorScheme.onPrimary,
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          _sendPushNotification = val ?? false;
+                        });
+                      },
+                    ),
+                    if (_sendPushNotification) ...[
+                      const SizedBox(height: 12),
+                      _buildTextField(
+                        controller: _pushBodyController,
+                        hintText: 'Custom push body (Optional, defaults to new arrival template)',
+                        maxLines: 2,
+                      ),
+                    ],
+                  ],
                   const SizedBox(height: 32),
 
                   // Submit Button

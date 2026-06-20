@@ -139,9 +139,16 @@ class ProductsNotifier extends Notifier<List<Product>> {
 
   Future<void> refresh() => _load();
 
-  Future<void> addProduct(Product product) async {
+  Future<void> addProduct(Product product, {bool sendPush = false, String? pushBody}) async {
     try {
-      await ApiClient.instance.post('/api/products', data: product.toJson());
+      final data = product.toJson();
+      if (sendPush) {
+        data['send_push'] = true;
+        if (pushBody != null && pushBody.isNotEmpty) {
+          data['push_body'] = pushBody;
+        }
+      }
+      await ApiClient.instance.post('/api/products', data: data);
       await _load();
     } catch (_) {
       state = [product, ...state];
