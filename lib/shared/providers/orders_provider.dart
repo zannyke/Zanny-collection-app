@@ -357,3 +357,4 @@ class AdminOrdersNotifier extends Notifier<List<Order>> {
 final ordersProvider = NotifierProvider<OrdersNotifier, List<Order>>(OrdersNotifier.new);
 
 final adminOrdersProvider = NotifierProvider<AdminOrdersNotifier, List<Order>>(AdminOrdersNotifier.new);
+
