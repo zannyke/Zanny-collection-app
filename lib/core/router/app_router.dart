@@ -17,10 +17,27 @@ import '../../features/info/screens/faqs_screen.dart';
 import '../../features/info/screens/shipping_screen.dart';
 import '../../features/info/screens/contact_screen.dart';
 import '../../features/info/screens/care_guide_screen.dart';
+import '../../features/info/screens/fashion_screen.dart';
 import '../../shared/widgets/bottom_nav_scaffold.dart';
+import '../../features/admin/screens/admin_dashboard_screen.dart';
+import '../../features/admin/screens/admin_add_product_screen.dart';
+import '../../features/admin/screens/admin_add_style_screen.dart';
+import '../../shared/models/models.dart';
+import '../../shared/providers/auth_provider.dart';
+import '../../features/info/screens/legal_document_screen.dart';
+import '../../features/profile/screens/edit_profile_screen.dart';
+import '../../features/profile/screens/saved_addresses_screen.dart';
+import '../../features/orders/screens/orders_screen.dart';
+import '../../features/orders/screens/order_success_screen.dart';
+
+/// A global key that gives access to the Navigator outside the widget tree.
+/// Used by [NotificationService] to navigate on notification tap.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
+    navigatorKey: appNavigatorKey,
     initialLocation: '/splash',
     debugLogDiagnostics: false,
     routes: [
@@ -44,8 +61,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => const NoTransitionPage(child: CollectionsScreen()),
           ),
           GoRoute(
-            path: '/search',
-            pageBuilder: (context, state) => const NoTransitionPage(child: SearchScreen()),
+            path: '/fashion',
+            pageBuilder: (context, state) => const NoTransitionPage(child: FashionScreen()),
           ),
           GoRoute(
             path: '/profile',
@@ -61,6 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => CategoryScreen(
           slug: state.pathParameters['slug']!,
         ),
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const SearchScreen(),
       ),
       GoRoute(
         path: '/product/:id',
@@ -107,6 +128,82 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/care-guide',
         builder: (context, state) => const CareGuideScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminDashboardScreen(),
+        redirect: (context, state) {
+          final authState = ref.read(authProvider);
+          if (!authState.isSignedIn || authState.user?.email != 'admin@zannycollection.com') {
+            return '/';
+          }
+          return null;
+        },
+      ),
+      GoRoute(
+        path: '/admin/add-product',
+        builder: (context, state) {
+          final product = state.extra as Product?;
+          return AdminAddProductScreen(product: product);
+        },
+        redirect: (context, state) {
+          final authState = ref.read(authProvider);
+          if (!authState.isSignedIn || authState.user?.email != 'admin@zannycollection.com') {
+            return '/';
+          }
+          return null;
+        },
+      ),
+      GoRoute(
+        path: '/admin/add-style',
+        builder: (context, state) => const AdminAddStyleScreen(),
+        redirect: (context, state) {
+          final authState = ref.read(authProvider);
+          if (!authState.isSignedIn || authState.user?.email != 'admin@zannycollection.com') {
+            return '/';
+          }
+          return null;
+        },
+      ),
+      GoRoute(
+        path: '/terms',
+        builder: (context, state) => const LegalDocumentScreen(
+          title: 'TERMS OF SERVICE',
+          type: LegalDocumentType.termsOfService,
+        ),
+      ),
+      GoRoute(
+        path: '/privacy',
+        builder: (context, state) => const LegalDocumentScreen(
+          title: 'PRIVACY POLICY',
+          type: LegalDocumentType.privacyPolicy,
+        ),
+      ),
+      GoRoute(
+        path: '/cookie',
+        builder: (context, state) => const LegalDocumentScreen(
+          title: 'COOKIE POLICY',
+          type: LegalDocumentType.cookiePolicy,
+        ),
+      ),
+      GoRoute(
+        path: '/orders',
+        builder: (context, state) => const OrdersScreen(),
+      ),
+      GoRoute(
+        path: '/order-success',
+        builder: (context, state) {
+          final order = state.extra as Order;
+          return OrderSuccessScreen(order: order);
+        },
+      ),
+      GoRoute(
+        path: '/saved-addresses',
+        builder: (context, state) => const SavedAddressesScreen(),
+      ),
+      GoRoute(
+        path: '/edit-profile',
+        builder: (context, state) => const EditProfileScreen(),
       ),
     ],
 

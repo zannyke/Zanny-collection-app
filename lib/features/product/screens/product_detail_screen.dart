@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../core/theme/app_colors.dart';
+
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
 import '../../../shared/providers/product_provider.dart';
+import '../../../shared/providers/user_activity_provider.dart';
+import '../../../shared/providers/wishlist_provider.dart';
+import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/animations.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
@@ -23,20 +26,64 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   int _quantity = 1;
   bool _addedToCart = false;
   Product? _loadedProduct;
+  late final PageController _pageController;
+  int _currentImageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  Color _getSwatchColor(String name) {
+    final cleanName = name.toLowerCase();
+    if (cleanName.contains('black')) return Colors.black;
+    if (cleanName.contains('white')) return Colors.white;
+    if (cleanName.contains('grey') || cleanName.contains('gray')) return Colors.grey;
+    if (cleanName.contains('charcoal')) return const Color(0xFF333333);
+    if (cleanName.contains('olive')) return const Color(0xFF556B2F);
+    if (cleanName.contains('sage')) return const Color(0xFF8FBC8F);
+    if (cleanName.contains('red')) return const Color(0xFF8B0000);
+    if (cleanName.contains('blue') || cleanName.contains('navy')) return const Color(0xFF000080);
+    if (cleanName.contains('cream') || cleanName.contains('off-white')) return const Color(0xFFFFFDD0);
+    if (cleanName.contains('sand') || cleanName.contains('beige') || cleanName.contains('stone')) return const Color(0xFFE5D3B3);
+    if (cleanName.contains('mocha') || cleanName.contains('brown')) return const Color(0xFF5C4033);
+    return Colors.blueGrey;
+  }
+
+  void _buyNow(Product product) {
+    if (product.sizes.isNotEmpty && _selectedSize == null) return;
+    ref.read(cartProvider.notifier).addItem(
+          product,
+          _selectedColor ?? '',
+          _selectedSize ?? '',
+          _quantity,
+        );
+    context.push('/cart');
+  }
 
   @override
   Widget build(BuildContext context) {
     final productAsync = ref.watch(productDetailProvider(widget.productId));
+    final theme = Theme.of(context);
+    final isLight = theme.brightness == Brightness.light;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        backgroundColor: theme.scaffoldBackgroundColor,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
         title: Image.asset(
-          'assets/images/logo_with_bg.png',
+          'assets/images/logo_transparent.png',
           height: 38,
           width: 38,
         ),
@@ -57,17 +104,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                     child: Container(
                       width: 16,
                       height: 16,
-                      decoration: const BoxDecoration(
-                        color: AppColors.textPrimary,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
                         child: Text(
                           '$count',
-                          style: const TextStyle(
-                              color: AppColors.background,
+                          style: TextStyle(
+                              color: theme.colorScheme.onPrimary,
                               fontSize: 9,
-                              fontWeight: FontWeight.w700),
+                              fontWeight: FontWeight.w800),
                         ),
                       ),
                     ),
@@ -79,13 +126,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ],
       ),
       body: productAsync.when(
-        loading: () => const Center(
-          child: ZannyLoadingIndicator(size: 32, color: AppColors.textPrimary),
+        loading: () => Center(
+          child: ZannyLoadingIndicator(size: 32, color: theme.colorScheme.primary),
         ),
         error: (err, stack) => Center(
           child: Text(
             'Error: $err',
-            style: GoogleFonts.inter(color: AppColors.error),
+            style: GoogleFonts.inter(color: theme.colorScheme.error),
           ),
         ),
         data: (product) {
@@ -93,7 +140,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             return Center(
               child: Text(
                 'Product not found.',
-                style: GoogleFonts.inter(color: AppColors.textSecondary),
+                style: GoogleFonts.inter(color: theme.colorScheme.secondary),
               ),
             );
           }
@@ -104,44 +151,65 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _selectedColor = product.colors.isNotEmpty ? product.colors.first : null;
             _selectedSize = null;
             _quantity = 1;
+            _currentImageIndex = 0;
+            Future.microtask(() {
+              ref.read(userActivityProvider.notifier).recordProductView(product.id);
+            });
           }
 
           return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Product image
+                // Product image container with premium rounded bottom corners
                 Container(
                   height: 380,
                   width: double.infinity,
-                  color: AppColors.surfaceElevated,
+                  decoration: BoxDecoration(
+                    color: isLight ? const Color(0xFFF3F4F6) : const Color(0xFF1F1F1F),
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                  ),
                   child: Stack(
                     children: [
-                      Center(
-                        child: product.images.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: product.images.first,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                placeholder: (context, url) => const Center(
-                                  child: ZannyLoadingIndicator(
-                                    size: 24,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                                errorWidget: (context, url, error) => const Icon(
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                          child: product.images.isNotEmpty
+                              ? PageView.builder(
+                                  controller: _pageController,
+                                  onPageChanged: (index) {
+                                    setState(() {
+                                      _currentImageIndex = index;
+                                    });
+                                  },
+                                  itemCount: product.images.length,
+                                  itemBuilder: (context, index) {
+                                    return CachedNetworkImage(
+                                      imageUrl: product.images[index],
+                                      fit: BoxFit.contain,
+                                      placeholder: (context, url) => Center(
+                                        child: ZannyLoadingIndicator(
+                                          size: 24,
+                                          color: theme.colorScheme.secondary,
+                                        ),
+                                      ),
+                                      errorWidget: (context, url, error) => Icon(
+                                        Icons.image_outlined,
+                                        color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                                        size: 64,
+                                      ),
+                                    );
+                                  },
+                                )
+                              : Icon(
                                   Icons.image_outlined,
-                                  color: AppColors.textMuted,
+                                  color: theme.colorScheme.secondary.withValues(alpha: 0.5),
                                   size: 64,
                                 ),
-                              )
-                            : const Icon(
-                                Icons.image_outlined,
-                                color: AppColors.textMuted,
-                                size: 64,
-                              ),
+                        ),
                       ),
+
                       if (product.isNew)
                         Positioned(
                           top: 16,
@@ -149,21 +217,118 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 4),
-                            color: AppColors.textPrimary,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
                             child: Text(
                               'NEW',
                               style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.5,
-                                color: AppColors.background,
-                              ),
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.5,
+                                  color: theme.colorScheme.onPrimary),
                             ),
                           ),
                         ),
+                      // Floating wishlist toggle button
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Consumer(
+                          builder: (context, ref, _) {
+                            final isWish = ref.watch(isWishlistedProvider(product.id));
+                            final user = ref.watch(currentUserProvider);
+                            return Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: isLight ? Colors.white.withValues(alpha: 0.9) : Colors.black.withValues(alpha: 0.7),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: IconButton(
+                                iconSize: 18,
+                                padding: EdgeInsets.zero,
+                                icon: Icon(
+                                  isWish ? Icons.favorite : Icons.favorite_border,
+                                  color: isWish ? Colors.red : (isLight ? Colors.black87 : Colors.white70),
+                                ),
+                                onPressed: () {
+                                  if (user == null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Please sign in to save items to your wishlist')),
+                                    );
+                                    return;
+                                  }
+                                  ref.read(wishlistProvider.notifier).toggle(product);
+                                },
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),
+
+                if (product.images.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12, bottom: 4),
+                    child: SizedBox(
+                      height: 60,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: product.images.length,
+                        itemBuilder: (context, index) {
+                          final isSelected = _currentImageIndex == index;
+                          return GestureDetector(
+                            onTap: () {
+                              _pageController.animateToPage(
+                                index,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            child: Container(
+                              width: 60,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? theme.colorScheme.primary
+                                      : theme.colorScheme.outline.withValues(alpha: 0.5),
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: CachedNetworkImage(
+                                  imageUrl: product.images[index],
+                                  fit: BoxFit.cover,
+                                  placeholder: (context, url) => Container(
+                                    color: theme.colorScheme.surface,
+                                    child: const Center(
+                                      child: ZannyLoadingIndicator(size: 16),
+                                    ),
+                                  ),
+                                  errorWidget: (context, url, error) => const Icon(Icons.image_outlined, size: 20),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
 
                 Padding(
                   padding: const EdgeInsets.all(20),
@@ -184,7 +349,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                     fontSize: 10,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 2,
-                                    color: AppColors.textSecondary,
+                                    color: theme.colorScheme.secondary,
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -193,7 +358,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   style: GoogleFonts.playfairDisplay(
                                     fontSize: 22,
                                     fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ],
@@ -207,7 +372,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 style: GoogleFonts.inter(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                                  color: theme.colorScheme.onSurface,
                                 ),
                               ),
                               if (product.isOnSale)
@@ -215,7 +380,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   'KES ${product.originalPrice!.toStringAsFixed(0)}',
                                   style: GoogleFonts.inter(
                                     fontSize: 13,
-                                    color: AppColors.textMuted,
+                                    color: theme.colorScheme.secondary.withValues(alpha: 0.6),
                                     decoration: TextDecoration.lineThrough,
                                   ),
                                 ),
@@ -225,124 +390,157 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       ),
 
                       const SizedBox(height: 24),
-                      const Divider(color: AppColors.border),
+                      Divider(color: theme.colorScheme.outline),
                       const SizedBox(height: 20),
 
-                      // Color Selector
-                      if (product.colors.isNotEmpty) ...[
-                        Text(
-                          'COLOUR: ${_selectedColor ?? ''}',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.5,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 10,
-                          children: product.colors.map((color) {
-                            final isSelected = _selectedColor == color;
-                            return TactileButton(
-                              onTap: () => setState(() => _selectedColor = color),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? AppColors.textPrimary
-                                        : AppColors.border,
-                                    width: isSelected ? 1.5 : 0.5,
+                      // Option Grid: Sizes on Left, Colors on Right (aligned with reference image Style C)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Sizes (Left Side)
+                          if (product.sizes.isNotEmpty)
+                            Expanded(
+                              flex: 5,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'SIZE',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.5,
+                                      color: theme.colorScheme.secondary,
+                                    ),
                                   ),
-                                  color: isSelected
-                                      ? AppColors.textPrimary
-                                      : AppColors.surface,
-                                ),
-                                child: Text(
-                                  color,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: isSelected
-                                        ? AppColors.background
-                                        : AppColors.textPrimary,
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    children: product.sizes.map((size) {
+                                      final isSelected = _selectedSize == size;
+                                      return TactileButton(
+                                        onTap: () => setState(() => _selectedSize = size),
+                                        child: Container(
+                                          width: 38,
+                                          height: 38,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: isSelected
+                                                  ? theme.colorScheme.primary
+                                                  : theme.colorScheme.outline,
+                                              width: isSelected ? 1.5 : 0.5,
+                                            ),
+                                            color: isSelected
+                                                ? theme.colorScheme.primary
+                                                : theme.colorScheme.surface,
+                                          ),
+                                          child: Text(
+                                            size,
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isSelected
+                                                  ? theme.colorScheme.onPrimary
+                                                  : theme.colorScheme.onSurface,
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
-                                ),
+                                  const SizedBox(height: 6),
+                                  TextButton(
+                                    onPressed: () => _showSizeGuide(context),
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Text(
+                                      'Size Chart',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        color: theme.colorScheme.secondary,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+                            ),
 
-                      // Size Selector
-                      if (product.sizes.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'SIZE',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.5,
-                                color: AppColors.textSecondary,
+                          const SizedBox(width: 16),
+
+                          // Colors (Right Side)
+                          if (product.colors.isNotEmpty)
+                            Expanded(
+                              flex: 5,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'COLOURS',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.5,
+                                      color: theme.colorScheme.secondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: product.colors.map((color) {
+                                      final isSelected = _selectedColor == color;
+                                      final swatchColor = _getSwatchColor(color);
+                                      return Tooltip(
+                                        message: color,
+                                        child: TactileButton(
+                                          onTap: () => setState(() => _selectedColor = color),
+                                          child: Container(
+                                            width: 28,
+                                            height: 28,
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: swatchColor,
+                                              border: Border.all(
+                                                color: isSelected
+                                                    ? theme.colorScheme.primary
+                                                    : theme.colorScheme.outline,
+                                                width: isSelected ? 2.0 : 0.5,
+                                              ),
+                                            ),
+                                            child: isSelected
+                                                ? Icon(
+                                                    Icons.check_rounded,
+                                                    color: swatchColor.computeLuminance() > 0.5 ? Colors.black : Colors.white,
+                                                    size: 14,
+                                                  )
+                                                : null,
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _selectedColor ?? '',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: theme.colorScheme.secondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            TextButton(
-                              onPressed: () => _showSizeGuide(context),
-                              child: Text(
-                                'Size Guide',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: product.sizes.map((size) {
-                            final isSelected = _selectedSize == size;
-                            return TactileButton(
-                              onTap: () => setState(() => _selectedSize = size),
-                              child: Container(
-                                width: 48,
-                                height: 48,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? AppColors.textPrimary
-                                        : AppColors.border,
-                                    width: isSelected ? 1.5 : 0.5,
-                                  ),
-                                  color: isSelected
-                                      ? AppColors.textPrimary
-                                      : AppColors.surface,
-                                ),
-                                child: Text(
-                                  size,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: isSelected
-                                        ? AppColors.background
-                                        : AppColors.textPrimary,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+                        ],
+                      ),
+                      const SizedBox(height: 20),
 
                       // Quantity
                       Text(
@@ -351,7 +549,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.5,
-                          color: AppColors.textSecondary,
+                          color: theme.colorScheme.secondary,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -367,9 +565,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             width: 60,
                             height: 44,
                             alignment: Alignment.center,
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               border: Border.symmetric(
-                                horizontal: BorderSide(color: AppColors.border, width: 0.5),
+                                horizontal: BorderSide(color: theme.colorScheme.outline, width: 0.5),
                               ),
                             ),
                             child: Text(
@@ -377,7 +575,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               style: GoogleFonts.inter(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                                color: theme.colorScheme.onSurface,
                               ),
                             ),
                           ),
@@ -390,35 +588,69 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
                       const SizedBox(height: 28),
 
-                      // Add to Cart button
                       if (product.sizes.isNotEmpty && _selectedSize == null)
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.only(bottom: 12),
                           child: Text(
                             'Please select a size',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: AppColors.error,
+                              color: theme.colorScheme.error,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
 
-                      PremiumButton(
-                        onPressed: () => _addToCart(product),
-                        text: _addedToCart ? 'ADDED TO CART ✓' : 'ADD TO CART',
-                        type: PremiumButtonType.primary,
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      PremiumButton(
-                        onPressed: () => context.push('/cart'),
-                        text: 'VIEW CART',
-                        type: PremiumButtonType.secondary,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _addToCart(product),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                              child: Text(
+                                _addedToCart ? 'ADDED ✓' : 'ADD TO CART',
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  letterSpacing: 1,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () => _buyNow(product),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
+                              ),
+                              child: Text(
+                                'BUY NOW',
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
 
                       const SizedBox(height: 28),
-                      const Divider(color: AppColors.border),
+                      Divider(color: theme.colorScheme.outline),
                       const SizedBox(height: 20),
 
                       // Description
@@ -428,7 +660,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.5,
-                          color: AppColors.textSecondary,
+                          color: theme.colorScheme.secondary,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -436,14 +668,14 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         product.description,
                         style: GoogleFonts.inter(
                           fontSize: 14,
-                          color: AppColors.textSecondary,
+                          color: theme.colorScheme.secondary,
                           height: 1.7,
                         ),
                       ),
 
                       // "You May Also Like" Related Products
                       const SizedBox(height: 32),
-                      const Divider(color: AppColors.border),
+                      Divider(color: theme.colorScheme.outline),
                       const SizedBox(height: 20),
                       Text(
                         'YOU MAY ALSO LIKE',
@@ -451,16 +683,16 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 2,
-                          color: AppColors.textSecondary,
+                          color: theme.colorScheme.secondary,
                         ),
                       ),
                       const SizedBox(height: 16),
                       Consumer(builder: (context, ref, _) {
-                        final relatedAsync = ref.watch(relatedProductsProvider((product.category, product.id)));
+                        final relatedAsync = ref.watch(recommendedProductsProvider((product.id, product.category)));
                         return relatedAsync.when(
-                          loading: () => const SizedBox(
+                          loading: () => SizedBox(
                             height: 150,
-                            child: Center(child: ZannyLoadingIndicator(size: 24, color: AppColors.textPrimary)),
+                            child: Center(child: ZannyLoadingIndicator(size: 24, color: theme.colorScheme.primary)),
                           ),
                           error: (err, stack) => const SizedBox(),
                           data: (list) {
@@ -481,70 +713,78 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                       child: Container(
                                         width: 140,
                                         margin: const EdgeInsets.only(right: 12),
-                                        color: AppColors.surface,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Expanded(
-                                            child: Container(
-                                              color: AppColors.surfaceElevated,
-                                              child: item.images.isNotEmpty
-                                                  ? CachedNetworkImage(
-                                                      imageUrl: item.images.first,
-                                                      fit: BoxFit.cover,
-                                                      placeholder: (context, url) => const Center(
-                                                        child: ZannyLoadingIndicator(
-                                                          size: 16,
-                                                          color: AppColors.textSecondary,
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.surface,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: theme.colorScheme.outline, width: 0.5),
+                                        ),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(12),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Expanded(
+                                                child: Container(
+                                                  color: isLight ? const Color(0xFFF3F4F6) : const Color(0xFF1F1F1F),
+                                                  child: item.images.isNotEmpty
+                                                      ? Padding(
+                                                          padding: const EdgeInsets.all(8.0),
+                                                          child: CachedNetworkImage(
+                                                            imageUrl: item.images.first,
+                                                            fit: BoxFit.contain,
+                                                            placeholder: (context, url) => Center(
+                                                              child: ZannyLoadingIndicator(
+                                                                size: 16,
+                                                                color: theme.colorScheme.secondary,
+                                                              ),
+                                                            ),
+                                                            errorWidget: (context, url, error) => Icon(
+                                                              Icons.image_outlined,
+                                                              color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                                                              size: 20,
+                                                            ),
+                                                          ),
+                                                        )
+                                                      : Icon(
+                                                          Icons.image_outlined,
+                                                          color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                                                          size: 20,
                                                         ),
+                                                ),
+                                              ),
+                                              Padding(
+                                                padding: const EdgeInsets.all(8),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      item.name,
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: theme.colorScheme.onSurface,
                                                       ),
-                                                      errorWidget: (context, url, error) => const Icon(
-                                                        Icons.image_outlined,
-                                                        color: AppColors.textMuted,
-                                                        size: 20,
-                                                      ),
-                                                    )
-                                                  : const Center(
-                                                      child: Icon(
-                                                        Icons.image_outlined,
-                                                        color: AppColors.textMuted,
-                                                        size: 20,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      'KES ${item.price.toStringAsFixed(0)}',
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: theme.colorScheme.secondary,
                                                       ),
                                                     ),
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.all(8),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  item.name,
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppColors.textPrimary,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  ],
                                                 ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  'KES ${item.price.toStringAsFixed(0)}',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 10,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: AppColors.textSecondary,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
+                                              ),
+                                            ],
                                           ),
-                                        ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                );
+                                  );
                                 },
                               ),
                             );
@@ -553,17 +793,17 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       }),
 
                       const SizedBox(height: 32),
-                      const Divider(color: AppColors.border),
+                      Divider(color: theme.colorScheme.outline),
                       const SizedBox(height: 20),
 
                       // Value props
-                      _InfoRow(Icons.local_shipping_outlined, 'Fast Delivery',
+                      const _InfoRow(Icons.local_shipping_outlined, 'Fast Delivery',
                           'Delivered to your door'),
                       const SizedBox(height: 12),
-                      _InfoRow(Icons.cached_outlined, 'Easy Returns',
+                      const _InfoRow(Icons.cached_outlined, 'Easy Returns',
                           '14-day hassle-free returns'),
                       const SizedBox(height: 12),
-                      _InfoRow(Icons.verified_outlined, 'Safe Hustle',
+                      const _InfoRow(Icons.verified_outlined, 'Safe Hustle',
                           '100% authentic products'),
 
                       const SizedBox(height: 40),
@@ -590,20 +830,27 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _addedToCart = false);
     });
+    final theme = Theme.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${product.name} added to cart'),
-        backgroundColor: AppColors.surface,
+        content: Text(
+          '${product.name} added to cart',
+          style: TextStyle(color: theme.colorScheme.onSurface),
+        ),
+        backgroundColor: theme.colorScheme.surface,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   void _showSizeGuide(BuildContext context) {
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       isScrollControlled: true,
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
@@ -614,10 +861,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    letterSpacing: 2)),
+                    letterSpacing: 2,
+                    color: theme.colorScheme.onSurface)),
             const SizedBox(height: 20),
             Table(
-              border: TableBorder.all(color: AppColors.border, width: 0.5),
+              border: TableBorder.all(color: theme.colorScheme.outline, width: 0.5),
               children: [
                 for (final row in [
                   ['Size', 'Chest (cm)', 'Waist (cm)', 'Hip (cm)'],
@@ -634,7 +882,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               padding: const EdgeInsets.all(10),
                               child: Text(
                                 cell,
-                                style: GoogleFonts.inter(fontSize: 12),
+                                style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurface),
                                 textAlign: TextAlign.center,
                               ),
                             ))
@@ -657,6 +907,7 @@ class _QuantityButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return TactileButton(
       onTap: onTap,
       child: Container(
@@ -664,10 +915,11 @@ class _QuantityButton extends StatelessWidget {
         height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          border: Border.all(color: AppColors.border, width: 0.5),
-          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: theme.colorScheme.outline, width: 0.5),
+          color: theme.colorScheme.surface,
         ),
-        child: Icon(icon, size: 18, color: AppColors.textPrimary),
+        child: Icon(icon, size: 18, color: theme.colorScheme.onSurface),
       ),
     );
   }
@@ -681,9 +933,10 @@ class _InfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.textPrimary),
+        Icon(icon, size: 18, color: theme.colorScheme.onSurface),
         const SizedBox(width: 12),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -692,10 +945,10 @@ class _InfoRow extends StatelessWidget {
                 style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary)),
+                    color: theme.colorScheme.onSurface)),
             Text(subtitle,
                 style: GoogleFonts.inter(
-                    fontSize: 11, color: AppColors.textSecondary)),
+                    fontSize: 11, color: theme.colorScheme.secondary)),
           ],
         ),
       ],

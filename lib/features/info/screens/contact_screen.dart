@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/animations.dart';
 
 class ContactScreen extends StatefulWidget {
@@ -31,8 +30,9 @@ class _ContactScreenState extends State<ContactScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -53,6 +53,7 @@ class _ContactScreenState extends State<ContactScreen> {
   }
 
   Widget _buildForm() {
+    final theme = Theme.of(context);
     return Form(
       key: _formKey,
       child: Column(
@@ -61,13 +62,13 @@ class _ContactScreenState extends State<ContactScreen> {
           Text(
             'Get in Touch',
             style: GoogleFonts.playfairDisplay(
-              fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary,
+              fontSize: 28, fontWeight: FontWeight.w700, color: theme.colorScheme.primary,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             "We'd love to hear from you. Fill in the form below\nor reach us directly.",
-            style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary, height: 1.5),
           ),
           const SizedBox(height: 32),
 
@@ -75,22 +76,22 @@ class _ContactScreenState extends State<ContactScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border, width: 0.5),
-              color: AppColors.surface,
+              border: Border.all(color: theme.colorScheme.outline, width: 0.5),
+              color: theme.colorScheme.surface,
             ),
             child: Column(
               children: [
-                _ContactRow(Icons.chat_bubble_outline, 'WhatsApp', '+254 700 000 000'),
-                const Divider(color: AppColors.border, height: 20),
-                _ContactRow(Icons.mail_outline, 'Email', 'hello@zannycollection.com'),
-                const Divider(color: AppColors.border, height: 20),
-                _ContactRow(Icons.camera_alt_outlined, 'Instagram', '@zannycollection'),
+                const _ContactRow(Icons.chat_bubble_outline, 'WhatsApp', '+254 103 809594'),
+                Divider(color: theme.colorScheme.outline, height: 20),
+                const _ContactRow(Icons.mail_outline, 'Email', 'zannykenya254@gmail.com'),
+                Divider(color: theme.colorScheme.outline, height: 20),
+                const _ContactRow(Icons.camera_alt_outlined, 'Instagram', '@zannycollection_'),
               ],
             ),
           ),
           const SizedBox(height: 28),
 
-          _FieldLabel('YOUR NAME'),
+          const _FieldLabel('YOUR NAME'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _nameCtrl,
@@ -100,7 +101,7 @@ class _ContactScreenState extends State<ContactScreen> {
           ),
           const SizedBox(height: 16),
 
-          _FieldLabel('EMAIL ADDRESS'),
+          const _FieldLabel('EMAIL ADDRESS'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _emailCtrl,
@@ -114,7 +115,7 @@ class _ContactScreenState extends State<ContactScreen> {
           ),
           const SizedBox(height: 16),
 
-          _FieldLabel('SUBJECT'),
+          const _FieldLabel('SUBJECT'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _subjectCtrl,
@@ -123,7 +124,7 @@ class _ContactScreenState extends State<ContactScreen> {
           ),
           const SizedBox(height: 16),
 
-          _FieldLabel('MESSAGE'),
+          const _FieldLabel('MESSAGE'),
           const SizedBox(height: 8),
           TextFormField(
             controller: _messageCtrl,
@@ -163,13 +164,14 @@ class _ContactRow extends StatelessWidget {
   const _ContactRow(this.icon, this.label, this.value);
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Row(
       children: [
-        Icon(icon, size: 18, color: AppColors.textPrimary),
+        Icon(icon, size: 18, color: theme.colorScheme.primary),
         const SizedBox(width: 12),
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5, color: AppColors.textSecondary)),
-          Text(value, style: GoogleFonts.inter(fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
+          Text(label, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5, color: theme.colorScheme.secondary)),
+          Text(value, style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.primary, fontWeight: FontWeight.w500)),
         ]),
       ],
     );
@@ -180,15 +182,19 @@ class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel(this.text);
   @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.textSecondary),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text,
+      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: theme.colorScheme.secondary),
+    );
+  }
 }
 
 class _SentConfirmation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return SizedBox(
       height: 500,
       child: Column(
@@ -196,15 +202,15 @@ class _SentConfirmation extends StatelessWidget {
         children: [
           Container(
             width: 72, height: 72,
-            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.textPrimary)),
-            child: const Icon(Icons.check, size: 32, color: AppColors.textPrimary),
+            decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: theme.colorScheme.primary)),
+            child: Icon(Icons.check, size: 32, color: theme.colorScheme.primary),
           ),
           const SizedBox(height: 24),
-          Text('Message Sent!', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          Text('Message Sent!', style: GoogleFonts.playfairDisplay(fontSize: 24, fontWeight: FontWeight.w700, color: theme.colorScheme.primary)),
           const SizedBox(height: 10),
           Text(
             "We'll get back to you within 24 hours.",
-            style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary),
+            style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.secondary),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),

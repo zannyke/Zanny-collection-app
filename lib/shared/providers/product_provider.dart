@@ -1,388 +1,228 @@
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/supabase/supabase_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/cloudflare/api_client.dart';
+import '../../core/cloudflare/cloudflare_config.dart';
 import '../models/models.dart';
 
 // ── Product Repository ────────────────────────────────────────────────────────
 
-// ── Product Repository ────────────────────────────────────────────────────────
-
 class ProductRepository {
-  final SupabaseClient _client;
-  ProductRepository(this._client);
+  final ApiClient _api = ApiClient.instance;
 
-  bool get _useMock => !SupabaseConfig.isConfigured;
+  static const String _cacheKey = 'cf_cached_products';
 
-  /// Fetch all products for a category slug
-  Future<List<Product>> fetchByCategory(String slug, {String sort = 'created_at'}) async {
-    if (_useMock) {
-      return _getMockByCategory(slug, sort);
-    }
+  static Future<void> _saveLocal(List<Product> list) async {
     try {
-      final baseQuery = _client
-          .from('products')
-          .select()
-          .eq('category_slug', slug)
-          .eq('is_active', true);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode(list.map((p) => p.toJson()).toList()));
+    } catch (_) {}
+  }
 
-      PostgrestTransformBuilder<PostgrestList> query;
-      // Apply sort
-      switch (sort) {
-        case 'price_asc':
-          query = baseQuery.order('price', ascending: true);
-        case 'price_desc':
-          query = baseQuery.order('price', ascending: false);
-        case 'newest':
-          query = baseQuery.order('created_at', ascending: false);
-        default:
-          query = baseQuery.order('is_new', ascending: false);
-      }
+  static Future<List<Product>> _loadLocal() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final s = prefs.getString(_cacheKey);
+      if (s == null) return [];
+      final List decoded = jsonDecode(s);
+      return decoded.map((j) => Product.fromJson(Map<String, dynamic>.from(j))).toList();
+    } catch (_) { return []; }
+  }
 
-      final data = await query;
-      return (data as List).map((json) => Product.fromJson(_parseJson(json))).toList();
-    } catch (e) {
-      print('⚠️ Supabase error in fetchByCategory, falling back to mock: $e');
-      return _getMockByCategory(slug, sort);
+  Future<List<Product>> fetchAll() async {
+    try {
+      final resp = await _api.get('/api/products');
+      final list = _parseProducts(resp.data['products'] as List);
+      await _saveLocal(list);
+      return list;
+    } catch (_) {
+      return _loadLocal();
     }
   }
 
-  /// Fetch new arrivals
-  Future<List<Product>> fetchNewArrivals({int limit = 8}) async {
-    if (_useMock) {
-      return _mockProducts.where((p) => p.isNew).take(limit).toList();
-    }
+  Future<List<Product>> fetchByCategory(String slug, {String sort = 'default'}) async {
     try {
-      final data = await _client
-          .from('products')
-          .select()
-          .eq('is_new', true)
-          .eq('is_active', true)
-          .order('created_at', ascending: false)
-          .limit(limit);
-      return (data as List).map((json) => Product.fromJson(_parseJson(json))).toList();
-    } catch (e) {
-      print('⚠️ Supabase error in fetchNewArrivals, falling back to mock: $e');
-      return _mockProducts.where((p) => p.isNew).take(limit).toList();
+      final resp = await _api.get('/api/products', queryParameters: {
+        'category': slug,
+        'sort': sort,
+      });
+      return _parseProducts(resp.data['products'] as List);
+    } on DioException catch (_) {
+      final all = await _loadLocal();
+      return _filterLocal(all, slug, sort);
     }
   }
 
-  /// Fetch sale products
-  Future<List<Product>> fetchSale({int limit = 20}) async {
-    if (_useMock) {
-      return _mockProducts.where((p) => p.isSale).take(limit).toList();
-    }
-    try {
-      final data = await _client
-          .from('products')
-          .select()
-          .eq('is_sale', true)
-          .eq('is_active', true)
-          .order('price', ascending: true)
-          .limit(limit);
-      return (data as List).map((json) => Product.fromJson(_parseJson(json))).toList();
-    } catch (e) {
-      print('⚠️ Supabase error in fetchSale, falling back to mock: $e');
-      return _mockProducts.where((p) => p.isSale).take(limit).toList();
-    }
-  }
-
-  /// Fetch a single product by ID
   Future<Product?> fetchById(String id) async {
-    if (_useMock) {
-      return _mockProducts.firstWhere((p) => p.id == id, orElse: () => _mockProducts.first);
-    }
     try {
-      final data = await _client
-          .from('products')
-          .select()
-          .eq('id', id)
-          .eq('is_active', true)
-          .maybeSingle();
-      if (data == null) return null;
-      return Product.fromJson(_parseJson(data));
-    } catch (e) {
-      print('⚠️ Supabase error in fetchById, falling back to mock: $e');
-      return _mockProducts.firstWhere((p) => p.id == id, orElse: () => _mockProducts.first);
+      final resp = await _api.get('/api/products/$id');
+      return _parseProduct(resp.data['product'] as Map<String, dynamic>);
+    } catch (_) {
+      final all = await _loadLocal();
+      return all.where((p) => p.id == id).firstOrNull;
     }
   }
 
-  /// Full-text search across products
   Future<List<Product>> search(String query) async {
     if (query.isEmpty) return [];
-    if (_useMock) {
-      final q = query.toLowerCase();
-      return _mockProducts
-          .where((p) => p.name.toLowerCase().contains(q) || p.description.toLowerCase().contains(q))
-          .toList();
-    }
     try {
-      final data = await _client
-          .from('products')
-          .select()
-          .eq('is_active', true)
-          .or('name.ilike.%$query%,description.ilike.%$query%')
-          .limit(30);
-      return (data as List).map((json) => Product.fromJson(_parseJson(json))).toList();
-    } catch (e) {
-      print('⚠️ Supabase error in search, falling back to mock: $e');
+      final resp = await _api.get('/api/products', queryParameters: {'search': query});
+      return _parseProducts(resp.data['products'] as List);
+    } catch (_) {
+      final all = await _loadLocal();
       final q = query.toLowerCase();
-      return _mockProducts
-          .where((p) => p.name.toLowerCase().contains(q) || p.description.toLowerCase().contains(q))
-          .toList();
+      return all.where((p) =>
+        p.name.toLowerCase().contains(q) || p.description.toLowerCase().contains(q)
+      ).toList();
     }
   }
 
-  /// Fetch related products (same category, exclude current)
-  Future<List<Product>> fetchRelated(String categorySlug, String excludeId, {int limit = 6}) async {
-    if (_useMock) {
-      return _mockProducts
-          .where((p) => p.category == categorySlug && p.id != excludeId)
-          .take(limit)
-          .toList();
-    }
-    try {
-      final data = await _client
-          .from('products')
-          .select()
-          .eq('category_slug', categorySlug)
-          .eq('is_active', true)
-          .neq('id', excludeId)
-          .limit(limit);
-      return (data as List).map((json) => Product.fromJson(_parseJson(json))).toList();
-    } catch (e) {
-      print('⚠️ Supabase error in fetchRelated, falling back to mock: $e');
-      return _mockProducts
-          .where((p) => p.category == categorySlug && p.id != excludeId)
-          .take(limit)
-          .toList();
-    }
-  }
-
-  List<Product> _getMockByCategory(String slug, String sort) {
+  List<Product> _filterLocal(List<Product> all, String slug, String sort) {
     List<Product> list;
-    if (slug == 'sale') {
-      list = _mockProducts.where((p) => p.isSale).toList();
-    } else if (slug == 'new-arrivals') {
-      list = _mockProducts.where((p) => p.isNew).toList();
+    if (slug == 'new-arrivals') {
+      list = all.where((p) => p.isNew).toList();
+    } else if (slug == 'sale') {
+      list = all.where((p) => p.isSale).toList();
     } else {
-      list = _mockProducts.where((p) => p.category == slug).toList();
+      list = all.where((p) => p.category == slug).toList();
     }
-
-    // Apply sort
-    if (sort == 'price_asc') {
-      list.sort((a, b) => a.price.compareTo(b.price));
-    } else if (sort == 'price_desc') {
-      list.sort((a, b) => b.price.compareTo(a.price));
-    }
+    if (sort == 'price_asc') list.sort((a, b) => a.price.compareTo(b.price));
+    if (sort == 'price_desc') list.sort((a, b) => b.price.compareTo(a.price));
     return list;
   }
 
-  Map<String, dynamic> _parseJson(dynamic json) {
-    final map = Map<String, dynamic>.from(json as Map);
-    // Parse jsonb arrays back to Dart lists
-    map['images'] = _parseList(map['images']);
-    map['colors'] = _parseList(map['colors']);
-    map['sizes']  = _parseList(map['sizes']);
-    return map;
+  List<Product> _parseProducts(List raw) {
+    return raw
+      .map((j) => _parseProduct(Map<String, dynamic>.from(j as Map)))
+      .toList();
   }
 
-  List<String> _parseList(dynamic value) {
-    if (value is List) return value.map((e) => e.toString()).toList();
+  Product _parseProduct(Map<String, dynamic> json) {
+    // Normalise R2 image URLs
+    final images = _parseList(json['images'])
+        .map((url) => _resolveImageUrl(url))
+        .toList();
+    return Product.fromJson({ ...json, 'images': images });
+  }
+
+  String _resolveImageUrl(String url) {
+    if (url.isEmpty) return url;
+    if (url.startsWith('http')) return url;
+    // Relative path — prepend R2 public URL
+    return '${CloudflareConfig.r2PublicUrl}/$url'.replaceAll('//', '/').replaceFirst(':/', '://');
+  }
+
+  List<String> _parseList(dynamic v) {
+    if (v is List) return v.map((e) => e.toString()).toList();
     return [];
   }
+}
 
-  // ── Premium Mock Products Catalog ──────────────────────────────────────────
-  static final List<Product> _mockProducts = [
-    // New Arrivals / Tee
-    const Product(
-      id: 'new_1',
-      name: 'Oversized ZC Heavyweight Hoodie',
-      subtitle: 'New Season',
-      description: 'The ultimate streetwear statement. Crafted from 450GSM organic loopback cotton, this hoodie features dropped shoulders, double-lined hood without drawcords, and custom silicone-injected chest branding.',
-      price: 3800,
-      originalPrice: 4500,
-      images: ['https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=600'],
-      colors: ['Charcoal Black', 'Heather Grey', 'Olive Green'],
-      sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-      category: 'hoodies',
-      isNew: true,
-      isSale: true,
-    ),
-    const Product(
-      id: 'new_2',
-      name: 'ZC Vibe Box Graphic Tee',
-      subtitle: 'New Season',
-      description: 'Ultra-premium vintage wash jersey tee. 240GSM combed cotton, oversized retro silhouette with high collar rib. High-density puff print graphic at the front.',
-      price: 1800,
-      originalPrice: null,
-      images: ['https://images.unsplash.com/photo-1521572267360-ee0c2909d518?q=80&w=600'],
-      colors: ['Vintage Black', 'Off-White', 'Muted Red'],
-      sizes: ['S', 'M', 'L', 'XL'],
-      category: 'shirts-t-shirts',
-      isNew: true,
-    ),
-    const Product(
-      id: 'new_3',
-      name: 'ZC Utility Cargo Sweatpants',
-      subtitle: 'New Season',
-      description: 'Fleece-lined utility joggers with signature double-pockets at sides. Elastic waistband and cuffs with internal drawstring. Minimalist brand embroidery.',
-      price: 2900,
-      originalPrice: 3200,
-      images: ['https://images.unsplash.com/photo-1551854838-212c50b4c184?q=80&w=600'],
-      colors: ['Black', 'Sand', 'Stone Grey'],
-      sizes: ['M', 'L', 'XL'],
-      category: 'shorts-sweatpants',
-      isNew: true,
-      isSale: true,
-    ),
+// ── Products Notifier ─────────────────────────────────────────────────────────
 
-    // Shirts & T-Shirts
-    const Product(
-      id: 'tee_1',
-      name: 'ZC Signature Minimalist Tee',
-      subtitle: 'Essential Collection',
-      description: 'Our classic everyday heavyweight tee. Features a premium boxy fit, tight crewneck collar, and subtle tonal branding.',
-      price: 1500,
-      originalPrice: null,
-      images: ['https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?q=80&w=600'],
-      colors: ['Black', 'White', 'Beige', 'Navy'],
-      sizes: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
-      category: 'shirts-t-shirts',
-    ),
-    const Product(
-      id: 'tee_2',
-      name: 'ZC Oversized Waffle Knit Shirt',
-      subtitle: 'Summer Drops',
-      description: 'Relaxed button-up shirt in premium waffle textured cotton. Perfect lightweight outer layer for warm afternoons.',
-      price: 2400,
-      originalPrice: 2800,
-      images: ['https://images.unsplash.com/photo-1596755094514-f87e34085b2c?q=80&w=600'],
-      colors: ['Cream', 'Olive', 'Charcoal'],
-      sizes: ['S', 'M', 'L', 'XL'],
-      category: 'shirts-t-shirts',
-      isSale: true,
-    ),
+class ProductsNotifier extends Notifier<List<Product>> {
+  final _repo = ProductRepository();
 
-    // Hoodies
-    const Product(
-      id: 'hoodie_1',
-      name: 'ZC Street Culture Pullover',
-      subtitle: 'Streetwear Essentials',
-      description: 'Heavy fleece core hoodie with kangaroo pocket and embroidered street crest. Relaxed boxy fit.',
-      price: 3200,
-      originalPrice: null,
-      images: ['https://images.unsplash.com/photo-1543163521-1bf539c55dd2?q=80&w=600'],
-      colors: ['Core Black', 'Cream White', 'Mocha'],
-      sizes: ['S', 'M', 'L', 'XL', 'XXL'],
-      category: 'hoodies',
-    ),
+  @override
+  List<Product> build() {
+    _load();
+    return Product.defaultMockProducts; // Show mock while loading
+  }
 
-    // Sweaters
-    const Product(
-      id: 'sweater_1',
-      name: 'ZC Cable-Knit Chunky Sweater',
-      subtitle: 'Premium Knits',
-      description: 'Thick and warm cable-knit sweater made from premium wool blend. Clean minimalist ribbed hem.',
-      price: 2800,
-      originalPrice: 3500,
-      images: ['https://images.unsplash.com/photo-1620799140408-edc6dcb6d633?q=80&w=600'],
-      colors: ['Off-White', 'Sage Green', 'Navy Blue'],
-      sizes: ['S', 'M', 'L', 'XL'],
-      category: 'sweaters',
-      isSale: true,
-    ),
+  Future<void> _load() async {
+    try {
+      final products = await _repo.fetchAll();
+      if (products.isNotEmpty) state = products;
+    } catch (_) {}
+  }
 
-    // Shorts & Sweatpants
-    const Product(
-      id: 'short_1',
-      name: 'ZC Fleece Comfort Shorts',
-      subtitle: 'Casual Lounge',
-      description: 'Heavy fleece shorts with zipper pockets and embroidered Z logo. Designed for everyday premium comfort.',
-      price: 1800,
-      originalPrice: null,
-      images: ['https://images.unsplash.com/photo-1591195853828-11db59a44f6b?q=80&w=600'],
-      colors: ['Black', 'Heather Grey', 'Sage'],
-      sizes: ['S', 'M', 'L', 'XL'],
-      category: 'shorts-sweatpants',
-    ),
+  Future<void> refresh() => _load();
 
-    // Shoes
-    const Product(
-      id: 'shoe_1',
-      name: 'ZC Urban Runner Sneaker',
-      subtitle: 'Street Footwear',
-      description: 'Premium calfskin leather sneakers with custom chunky lightweight sole and orthotic memory insole.',
-      price: 4800,
-      originalPrice: 6000,
-      images: ['https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600'],
-      colors: ['Triple Black', 'Mono White', 'Vintage Cream'],
-      sizes: ['40', '41', '42', '43', '44'],
-      category: 'shoes',
-      isSale: true,
-    ),
+  Future<void> addProduct(Product product) async {
+    try {
+      await ApiClient.instance.post('/api/products', data: product.toJson());
+      await _load();
+    } catch (_) {
+      state = [product, ...state];
+    }
+  }
 
-    // Innerwear
-    const Product(
-      id: 'inner_1',
-      name: 'ZC Bamboo Boxer Briefs (3-Pack)',
-      subtitle: 'Essentials',
-      description: 'Super-soft and breathable bamboo fiber boxer briefs. Seamless design with anti-roll waistband.',
-      price: 1500,
-      originalPrice: null,
-      images: ['https://images.unsplash.com/photo-1562157873-818bc0726f68?q=80&w=600'],
-      colors: ['Multi-pack (Black/Grey/Navy)'],
-      sizes: ['M', 'L', 'XL'],
-      category: 'innerwear',
-    ),
+  Future<void> updateProduct(Product product) async {
+    try {
+      await ApiClient.instance.put('/api/products/${product.id}', data: product.toJson());
+      await _load();
+    } catch (_) {
+      state = state.map((p) => p.id == product.id ? product : p).toList();
+    }
+  }
 
-    // Accessories
-    const Product(
-      id: 'acc_1',
-      name: 'ZC Signature Trucker Cap',
-      subtitle: 'Headwear',
-      description: 'Curved visor trucker hat with high-density foam front panel, mesh back, and snapback adjustment.',
-      price: 1200,
-      originalPrice: null,
-      images: ['https://images.unsplash.com/photo-1588850561407-ed78c282e89b?q=80&w=600'],
-      colors: ['Black/White', 'All Black', 'Brown/Beige'],
-      sizes: ['One Size'],
-      category: 'accessories',
-    ),
-  ];
+  Future<void> deleteProduct(String id) async {
+    try {
+      await ApiClient.instance.delete('/api/products/$id');
+      state = state.where((p) => p.id != id).toList();
+    } catch (_) {
+      state = state.where((p) => p.id != id).toList();
+    }
+  }
 }
 
 // ── Providers ─────────────────────────────────────────────────────────────────
 
-final productRepositoryProvider = Provider<ProductRepository>((ref) {
-  return ProductRepository(SupabaseConfig.client);
+final productsStateProvider =
+    NotifierProvider<ProductsNotifier, List<Product>>(ProductsNotifier.new);
+
+final productRepositoryProvider = Provider<ProductRepository>((_) => ProductRepository());
+
+final categoryProductsProvider =
+    FutureProvider.family<List<Product>, (String slug, String sort)>((ref, args) async {
+  final all = ref.watch(productsStateProvider);
+  final slug = args.$1;
+  final sort = args.$2;
+  List<Product> list;
+  if (slug == 'new-arrivals') {
+    list = all.where((p) => p.isNew).toList();
+  } else if (slug == 'sale') {
+    list = all.where((p) => p.isSale).toList();
+  } else {
+    list = all.where((p) => p.category == slug).toList();
+  }
+  if (sort == 'price_asc') list.sort((a, b) => a.price.compareTo(b.price));
+  if (sort == 'price_desc') list.sort((a, b) => b.price.compareTo(a.price));
+  return list;
 });
 
-/// Fetch products by category
-final categoryProductsProvider = FutureProvider.family<List<Product>, (String slug, String sort)>((ref, args) async {
-  final repo = ref.read(productRepositoryProvider);
-  return repo.fetchByCategory(args.$1, sort: args.$2);
-});
-
-/// Fetch new arrivals
 final newArrivalsProvider = FutureProvider<List<Product>>((ref) async {
-  final repo = ref.read(productRepositoryProvider);
-  return repo.fetchNewArrivals();
+  return ref.watch(productsStateProvider).where((p) => p.isNew).toList();
 });
 
-/// Search results
 final searchResultsProvider = FutureProvider.family<List<Product>, String>((ref, query) async {
-  final repo = ref.read(productRepositoryProvider);
-  return repo.search(query);
+  if (query.isEmpty) return [];
+  final q = query.toLowerCase();
+  return ref.watch(productsStateProvider)
+      .where((p) => p.name.toLowerCase().contains(q) || p.description.toLowerCase().contains(q))
+      .toList();
 });
 
-/// Single product
 final productDetailProvider = FutureProvider.family<Product?, String>((ref, id) async {
-  final repo = ref.read(productRepositoryProvider);
-  return repo.fetchById(id);
+  final list = ref.watch(productsStateProvider);
+  return list.where((p) => p.id == id).firstOrNull ??
+      (list.isNotEmpty ? list.first : null);
 });
 
-/// Related products
-final relatedProductsProvider = FutureProvider.family<List<Product>, (String categorySlug, String excludeId)>((ref, args) async {
-  final repo = ref.read(productRepositoryProvider);
-  return repo.fetchRelated(args.$1, args.$2);
+final relatedProductsProvider =
+    FutureProvider.family<List<Product>, (String categorySlug, String excludeId)>((ref, args) async {
+  return ref.watch(productsStateProvider)
+      .where((p) => p.category == args.$1 && p.id != args.$2)
+      .toList();
+});
+
+final allProductsProvider = FutureProvider<List<Product>>((ref) async {
+  return ref.watch(productsStateProvider);
+});
+
+final zannyOriginalsProvider = FutureProvider<List<Product>>((ref) async {
+  return ref.watch(productsStateProvider).where((p) =>
+    p.name.toLowerCase().contains('zc') || p.name.toLowerCase().contains('zanny')
+  ).toList();
 });

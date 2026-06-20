@@ -1,93 +1,52 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/supabase/supabase_config.dart';
+import '../../core/cloudflare/api_client.dart';
 import '../models/models.dart';
 import 'auth_provider.dart';
 
 // ── Wishlist Notifier ─────────────────────────────────────────────────────────
 
 class WishlistNotifier extends AsyncNotifier<List<Product>> {
-  SupabaseClient get _client => SupabaseConfig.client;
-
-  static final List<Product> _mockWishlist = [];
+  final ApiClient _api = ApiClient.instance;
 
   @override
   Future<List<Product>> build() async {
-    if (!SupabaseConfig.isConfigured) {
-      return List.from(_mockWishlist);
-    }
-    final userId = ref.watch(currentUserProvider)?.id;
-    if (userId == null) return [];
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return [];
+    return _fetchFromServer();
+  }
+
+  Future<List<Product>> _fetchFromServer() async {
     try {
-      return await _fetchWishlist(userId);
-    } catch (e) {
-      print('⚠️ Supabase error in wishlist build: $e. Falling back to local wishlist.');
-      return List.from(_mockWishlist);
+      final resp = await _api.get('/api/wishlist');
+      final raw = resp.data['products'] as List? ?? [];
+      return raw.map((j) => Product.fromJson(Map<String, dynamic>.from(j as Map))).toList();
+    } catch (_) {
+      return [];
     }
   }
 
-  Future<List<Product>> _fetchWishlist(String userId) async {
-    final data = await _client
-        .from('wishlists')
-        .select('product_id, products(*)')
-        .eq('user_id', userId);
-
-    return (data as List)
-        .where((row) => row['products'] != null)
-        .map((row) => Product.fromJson(
-              Map<String, dynamic>.from(row['products'] as Map)
-                ..['images'] = _parseList(row['products']['images'])
-                ..['colors'] = _parseList(row['products']['colors'])
-                ..['sizes']  = _parseList(row['products']['sizes']),
-            ))
-        .toList();
-  }
-
-  List<String> _parseList(dynamic v) {
-    if (v is List) return v.map((e) => e.toString()).toList();
-    return [];
-  }
-
-  /// Toggle wishlist — add if not present, remove if present
   Future<void> toggle(Product product) async {
     final current = state.valueOrNull ?? [];
     final isWishlisted = current.any((p) => p.id == product.id);
-
-    if (!SupabaseConfig.isConfigured) {
-      if (isWishlisted) {
-        _mockWishlist.removeWhere((p) => p.id == product.id);
-      } else {
-        _mockWishlist.add(product);
-      }
-      state = AsyncData(List.from(_mockWishlist));
-      return;
-    }
-
-    final userId = SupabaseConfig.currentUser?.id;
-    if (userId == null) return;
 
     if (isWishlisted) {
       // Optimistic remove
       state = AsyncData(current.where((p) => p.id != product.id).toList());
       try {
-        await _client
-            .from('wishlists')
-            .delete()
-            .eq('user_id', userId)
-            .eq('product_id', product.id);
-      } catch (e) {
-        print('⚠️ Supabase error in wishlist toggle delete: $e');
+        await _api.delete('/api/wishlist/${product.id}');
+      } on DioException catch (_) {
+        // Rollback on failure
+        state = AsyncData([...current]);
       }
     } else {
       // Optimistic add
       state = AsyncData([...current, product]);
       try {
-        await _client.from('wishlists').upsert({
-          'user_id': userId,
-          'product_id': product.id,
-        });
-      } catch (e) {
-        print('⚠️ Supabase error in wishlist toggle upsert: $e');
+        await _api.post('/api/wishlist', data: {'product_id': product.id});
+      } on DioException catch (_) {
+        // Rollback on failure
+        state = AsyncData(current);
       }
     }
   }

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
 
 class ShippingScreen extends StatelessWidget {
   const ShippingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
         title: Text('SHIPPING & RETURNS', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2)),
@@ -22,15 +22,15 @@ class ShippingScreen extends StatelessWidget {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 28, 24, 28),
-              color: AppColors.surface,
+              color: theme.colorScheme.surface,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Shipping &\nReturns',
-                      style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary, height: 1.2)),
+                      style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.w700, color: theme.colorScheme.primary, height: 1.2)),
                   const SizedBox(height: 8),
                   Text('Everything you need to know about delivery and returns.',
-                      style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+                      style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
                 ],
               ),
             ),
@@ -39,7 +39,7 @@ class ShippingScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               child: Column(
                 children: [
-                  _ShippingSection(
+                  const _ShippingSection(
                     title: 'DELIVERY TIMES',
                     icon: Icons.schedule_outlined,
                     rows: [
@@ -49,7 +49,7 @@ class ShippingScreen extends StatelessWidget {
                       ('Remote areas', '5–7 business days'),
                     ],
                   ),
-                  _ShippingSection(
+                  const _ShippingSection(
                     title: 'DELIVERY FEES',
                     icon: Icons.local_shipping_outlined,
                     rows: [
@@ -58,7 +58,7 @@ class ShippingScreen extends StatelessWidget {
                       ('Free delivery threshold', 'Orders above KES 5,000'),
                     ],
                   ),
-                  _ShippingSection(
+                  const _ShippingSection(
                     title: 'RETURN POLICY',
                     icon: Icons.keyboard_return_outlined,
                     rows: [
@@ -67,7 +67,7 @@ class ShippingScreen extends StatelessWidget {
                       ('Sale items', 'Final sale — not returnable'),
                     ],
                   ),
-                  _ShippingSection(
+                  const _ShippingSection(
                     title: 'HOW TO RETURN',
                     icon: Icons.assignment_return_outlined,
                     rows: [
@@ -83,15 +83,15 @@ class ShippingScreen extends StatelessWidget {
                   // CTA
                   Container(
                     padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: 0.5), color: AppColors.surface),
+                    decoration: BoxDecoration(border: Border.all(color: theme.colorScheme.outline, width: 0.5), color: theme.colorScheme.surface),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Have a question about your order?',
-                            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
                         const SizedBox(height: 8),
                         Text('Our team is ready to help.',
-                            style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+                            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () => context.push('/contact'),
@@ -121,30 +121,31 @@ class _ShippingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          Icon(icon, size: 16, color: AppColors.textSecondary),
+          Icon(icon, size: 16, color: theme.colorScheme.secondary),
           const SizedBox(width: 8),
-          Text(title, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2, color: AppColors.textSecondary)),
+          Text(title, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2, color: theme.colorScheme.secondary)),
         ]),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: 0.5)),
+          decoration: BoxDecoration(border: Border.all(color: theme.colorScheme.outline, width: 0.5)),
           child: Column(
             children: rows.mapIndexed((index, row) => Column(
               children: [
-                if (index > 0) const Divider(color: AppColors.border, height: 0),
+                if (index > 0) Divider(color: theme.colorScheme.outline, height: 0),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(flex: 2,
-                        child: Text(row.$1, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary))),
+                        child: Text(row.$1, style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.secondary))),
                       Expanded(flex: 3,
-                        child: Text(row.$2, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary))),
+                        child: Text(row.$2, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w500, color: theme.colorScheme.primary))),
                     ],
                   ),
                 ),

@@ -184,7 +184,7 @@ class _PremiumSpinnerPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final Paint paint = Paint()
-      ..color = color.withValues(opacity: 0.15)
+      ..color = color.withValues(alpha: 0.15)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
 
@@ -238,6 +238,7 @@ class PremiumButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEnabled = onPressed != null && !isLoading;
+    final theme = Theme.of(context);
 
     Color bg;
     Color fg;
@@ -245,18 +246,18 @@ class PremiumButton extends StatelessWidget {
 
     switch (type) {
       case PremiumButtonType.primary:
-        bg = isEnabled ? AppColors.textPrimary : AppColors.border;
-        fg = isEnabled ? AppColors.background : AppColors.textMuted;
+        bg = isEnabled ? theme.colorScheme.primary : theme.colorScheme.outline;
+        fg = isEnabled ? theme.colorScheme.onPrimary : theme.colorScheme.secondary;
         border = BorderSide.none;
         break;
       case PremiumButtonType.secondary:
         bg = Colors.transparent;
-        fg = isEnabled ? AppColors.textPrimary : AppColors.textMuted;
-        border = BorderSide(color: isEnabled ? AppColors.textPrimary : AppColors.border, width: 1.0);
+        fg = isEnabled ? theme.colorScheme.primary : theme.colorScheme.secondary;
+        border = BorderSide(color: isEnabled ? theme.colorScheme.primary : theme.colorScheme.outline, width: 1.0);
         break;
       case PremiumButtonType.text:
         bg = Colors.transparent;
-        fg = isEnabled ? AppColors.textPrimary : AppColors.textMuted;
+        fg = isEnabled ? theme.colorScheme.primary : theme.colorScheme.secondary;
         border = BorderSide.none;
         break;
     }
@@ -266,7 +267,7 @@ class PremiumButton extends StatelessWidget {
       content = Center(
         child: ZannyLoadingIndicator(
           size: 20,
-          color: type == PremiumButtonType.primary ? AppColors.background : AppColors.textPrimary,
+          color: type == PremiumButtonType.primary ? theme.colorScheme.onPrimary : theme.colorScheme.primary,
         ),
       );
     } else {

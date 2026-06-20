@@ -112,7 +112,7 @@ class _SplashScreenState extends State<SplashScreen>
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.white.withOpacity(_glowOpacity.value),
+                              color: Colors.white.withValues(alpha: _glowOpacity.value),
                               blurRadius: 60,
                               spreadRadius: 20,
                             ),
@@ -122,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     // The actual logo
                     Image.asset(
-                      'assets/images/logo_with_bg.png',
+                      'assets/images/logo_transparent.png',
                       width: 130,
                       height: 130,
                     ),
@@ -167,7 +167,7 @@ class _SplashScreenState extends State<SplashScreen>
                         fontSize: 12,
                         fontWeight: FontWeight.w400,
                         letterSpacing: 5,
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.white.withValues(alpha: 0.5),
                       ),
                     ),
                   ],
@@ -191,7 +191,7 @@ class _SplashScreenState extends State<SplashScreen>
                 fontSize: 11,
                 fontStyle: FontStyle.italic,
                 letterSpacing: 1,
-                color: Colors.white.withOpacity(0.35),
+                color: Colors.white.withValues(alpha: 0.35),
               ),
             ),
           ),

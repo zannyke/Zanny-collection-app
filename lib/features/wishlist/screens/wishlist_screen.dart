@@ -7,8 +7,10 @@ import '../../../shared/models/models.dart';
 import '../../../shared/providers/wishlist_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/shimmer_widgets.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/product_card.dart';
+import '../../../shared/widgets/zanny_app_bar.dart';
 
 class WishlistScreen extends ConsumerWidget {
   const WishlistScreen({super.key});
@@ -24,17 +26,10 @@ class WishlistScreen extends ConsumerWidget {
     final wishlistAsync = ref.watch(wishlistProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
-        title: Text('WISHLIST', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 3)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.shopping_bag_outlined),
-            onPressed: () => context.push('/cart'),
-          ),
-          const SizedBox(width: 4),
-        ],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: const ZannyAppBar(
+        title: 'Wishlist',
+        showBack: true,
       ),
       body: wishlistAsync.when(
         loading: () => const ProductGridShimmer(),
@@ -55,6 +50,7 @@ class _WishlistGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return CustomScrollView(
+      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
       slivers: [
         SliverPadding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -63,7 +59,7 @@ class _WishlistGrid extends ConsumerWidget {
               children: [
                 Text(
                   '${products.length} ${products.length == 1 ? 'item' : 'items'} saved',
-                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+                  style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.secondary),
                 ),
               ],
             ),
@@ -73,7 +69,27 @@ class _WishlistGrid extends ConsumerWidget {
           padding: const EdgeInsets.all(16),
           sliver: SliverGrid(
             delegate: SliverChildBuilderDelegate(
-              (context, index) => _WishlistCard(product: products[index]),
+              (context, index) {
+                final product = products[index];
+                return FadeInSlide(
+                  delay: Duration(milliseconds: 50 * index),
+                  child: ProductCard(
+                    product: product,
+                    trailing: GestureDetector(
+                      onTap: () => ref.read(wishlistProvider.notifier).toggle(product),
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.favorite, size: 16, color: AppColors.sale),
+                      ),
+                    ),
+                  ),
+                );
+              },
               childCount: products.length,
             ),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -90,125 +106,7 @@ class _WishlistGrid extends ConsumerWidget {
   }
 }
 
-// ── Single Wishlist Card ───────────────────────────────────────────────────────
-class _WishlistCard extends ConsumerWidget {
-  final Product product;
-  const _WishlistCard({required this.product});
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return FadeInSlide(
-      child: TactileButton(
-        onTap: () => context.push('/product/${product.id}'),
-        child: Container(
-          color: AppColors.surface,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image with remove button
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  product.images.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: product.images.first,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => const Center(
-                            child: ZannyLoadingIndicator(
-                              size: 20,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => const Center(
-                            child: Icon(Icons.image_outlined, color: AppColors.textMuted, size: 32),
-                          ),
-                        )
-                      : Container(
-                          color: AppColors.surfaceElevated,
-                          child: const Center(
-                            child: Icon(Icons.image_outlined, color: AppColors.textMuted, size: 32),
-                          ),
-                        ),
-                  // Remove from wishlist button
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: GestureDetector(
-                      onTap: () => ref.read(wishlistProvider.notifier).toggle(product),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: const BoxDecoration(
-                          color: AppColors.background,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.favorite, size: 16, color: AppColors.sale),
-                      ),
-                    ),
-                  ),
-                  // NEW badge
-                  if (product.isNew)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        color: AppColors.textPrimary,
-                        child: Text('NEW',
-                            style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w800,
-                                letterSpacing: 1, color: AppColors.background)),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Product info
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(product.name,
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text('KES ${product.price.toStringAsFixed(0)}',
-                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                      if (product.isOnSale) ...[
-                        const SizedBox(width: 6),
-                        Text('KES ${product.originalPrice!.toStringAsFixed(0)}',
-                            style: GoogleFonts.inter(fontSize: 10, color: AppColors.textMuted,
-                                decoration: TextDecoration.lineThrough)),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  // Quick add to cart
-                  GestureDetector(
-                    onTap: () => context.push('/product/${product.id}'),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 7),
-                      decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: 0.5)),
-                      child: Text(
-                        'SELECT SIZE',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.textSecondary),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),);
-  }
-}
 
 // ── Empty State ────────────────────────────────────────────────────────────────
 class _EmptyWishlist extends StatelessWidget {
@@ -222,15 +120,15 @@ class _EmptyWishlist extends StatelessWidget {
           children: [
             Container(
               width: 80, height: 80,
-              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: AppColors.border)),
-              child: const Icon(Icons.favorite_outline, size: 36, color: AppColors.textMuted),
+              decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Theme.of(context).colorScheme.outline)),
+              child: Icon(Icons.favorite_outline, size: 36, color: Theme.of(context).colorScheme.secondary),
             ),
             const SizedBox(height: 20),
             Text('Your wishlist is empty',
-                style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface)),
             const SizedBox(height: 8),
             Text('Save pieces you love and find them easily later.',
-                style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary), textAlign: TextAlign.center),
+                style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.secondary), textAlign: TextAlign.center),
             const SizedBox(height: 28),
             PremiumButton(
               text: 'START SHOPPING',
@@ -250,10 +148,10 @@ class _SignInPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
-        title: Text('WISHLIST', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 3)),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: const ZannyAppBar(
+        title: 'Wishlist',
+        showBack: true,
       ),
       body: Center(
         child: Padding(
@@ -261,14 +159,14 @@ class _SignInPrompt extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.lock_outline, size: 48, color: AppColors.textMuted),
+              Icon(Icons.lock_outline, size: 48, color: Theme.of(context).colorScheme.secondary),
               const SizedBox(height: 16),
               Text('Sign in to view your wishlist',
-                  style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: Theme.of(context).colorScheme.onSurface),
                   textAlign: TextAlign.center),
               const SizedBox(height: 8),
               Text('Save your favourite pieces across devices.',
-                  style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary), textAlign: TextAlign.center),
+                  style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.secondary), textAlign: TextAlign.center),
               const SizedBox(height: 28),
               PremiumButton(
                 text: 'SIGN IN',
@@ -280,7 +178,7 @@ class _SignInPrompt extends StatelessWidget {
               TextButton(
                 onPressed: () => context.push('/register'),
                 child: Text('Create an account',
-                    style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+                    style: GoogleFonts.inter(fontSize: 13, color: Theme.of(context).colorScheme.secondary)),
               ),
             ],
           ),
@@ -299,9 +197,9 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 48, color: AppColors.textMuted),
+          Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.secondary),
           const SizedBox(height: 12),
-          Text('Something went wrong', style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary)),
+          Text('Something went wrong', style: GoogleFonts.inter(fontSize: 14, color: Theme.of(context).colorScheme.secondary)),
           const SizedBox(height: 8),
           TextButton(onPressed: () => context.pop(), child: const Text('Go Back')),
         ],

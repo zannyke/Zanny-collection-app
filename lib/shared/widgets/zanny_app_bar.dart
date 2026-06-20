@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../core/theme/app_colors.dart';
+
 import '../providers/cart_provider.dart';
 
 /// Premium Zanny app bar — reusable across all screens
@@ -29,13 +29,14 @@ class ZannyAppBar extends ConsumerWidget implements PreferredSizeWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cartCount = ref.watch(cartCountProvider);
 
+    final theme = Theme.of(context);
     return AppBar(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       elevation: 0,
       scrolledUnderElevation: 0,
       leading: showBack
           ? IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+              icon: Icon(Icons.arrow_back, color: theme.colorScheme.primary),
               onPressed: () => context.pop(),
             )
           : null,
@@ -45,13 +46,13 @@ class ZannyAppBar extends ConsumerWidget implements PreferredSizeWidget {
           ? Text(
               'ZANNY',
               style: GoogleFonts.playfairDisplay(
-                fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 6, color: AppColors.textPrimary,
+                fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 6, color: theme.colorScheme.primary,
               ),
             )
           : title != null
               ? Text(
                   title!.toUpperCase(),
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 3, color: AppColors.textPrimary),
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 3, color: theme.colorScheme.primary),
                 )
               : null,
       actions: [
@@ -61,7 +62,7 @@ class ZannyAppBar extends ConsumerWidget implements PreferredSizeWidget {
             alignment: Alignment.topRight,
             children: [
               IconButton(
-                icon: const Icon(Icons.shopping_bag_outlined, color: AppColors.textPrimary),
+                icon: Icon(Icons.shopping_bag_outlined, color: theme.colorScheme.primary),
                 onPressed: () => context.push('/cart'),
               ),
               if (cartCount > 0)
@@ -69,11 +70,11 @@ class ZannyAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   right: 6, top: 6,
                   child: Container(
                     width: 16, height: 16,
-                    decoration: const BoxDecoration(color: AppColors.textPrimary, shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
                     child: Center(
                       child: Text(
                         cartCount > 9 ? '9+' : '$cartCount',
-                        style: const TextStyle(color: AppColors.background, fontSize: 9, fontWeight: FontWeight.w800),
+                        style: TextStyle(color: theme.colorScheme.onPrimary, fontSize: 9, fontWeight: FontWeight.w800),
                       ),
                     ),
                   ),
@@ -84,7 +85,7 @@ class ZannyAppBar extends ConsumerWidget implements PreferredSizeWidget {
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(0.5),
-        child: Container(height: 0.5, color: AppColors.border),
+        child: Container(height: 0.5, color: theme.colorScheme.outline),
       ),
     );
   }

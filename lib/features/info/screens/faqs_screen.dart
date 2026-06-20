@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
 
 class FaqsScreen extends StatelessWidget {
   const FaqsScreen({super.key});
@@ -19,8 +18,9 @@ class FaqsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
         title: Text('FAQs', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 3)),
@@ -31,20 +31,20 @@ class FaqsScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Frequently Asked\nQuestions',
-            style: GoogleFonts.playfairDisplay(fontSize: 26, fontWeight: FontWeight.w700, color: AppColors.textPrimary, height: 1.2),
+            style: GoogleFonts.playfairDisplay(fontSize: 26, fontWeight: FontWeight.w700, color: theme.colorScheme.primary, height: 1.2),
           ),
           const SizedBox(height: 24),
           ..._faqs.map((faq) => _FaqTile(question: faq.$1, answer: faq.$2)),
           const SizedBox(height: 32),
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(border: Border.all(color: AppColors.border, width: 0.5)),
+            decoration: BoxDecoration(border: Border.all(color: theme.colorScheme.outline, width: 0.5)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Still have questions?', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                Text('Still have questions?', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
                 const SizedBox(height: 6),
-                Text('Our team is happy to help.', style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+                Text('Our team is happy to help.', style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () => context.push('/contact'),
@@ -74,6 +74,7 @@ class _FaqTileState extends State<_FaqTile> with SingleTickerProviderStateMixin 
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       children: [
         InkWell(
@@ -86,11 +87,11 @@ class _FaqTileState extends State<_FaqTile> with SingleTickerProviderStateMixin 
                 Expanded(
                   child: Text(
                     widget.question,
-                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary, height: 1.4),
+                    style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: theme.colorScheme.primary, height: 1.4),
                   ),
                 ),
                 const SizedBox(width: 12),
-                Icon(_expanded ? Icons.remove : Icons.add, size: 18, color: AppColors.textSecondary),
+                Icon(_expanded ? Icons.remove : Icons.add, size: 18, color: theme.colorScheme.secondary),
               ],
             ),
           ),
@@ -99,12 +100,12 @@ class _FaqTileState extends State<_FaqTile> with SingleTickerProviderStateMixin 
           firstChild: const SizedBox.shrink(),
           secondChild: Padding(
             padding: const EdgeInsets.only(bottom: 16),
-            child: Text(widget.answer, style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary, height: 1.6)),
+            child: Text(widget.answer, style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary, height: 1.6)),
           ),
           crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           duration: const Duration(milliseconds: 200),
         ),
-        const Divider(color: AppColors.border, height: 0),
+        Divider(color: theme.colorScheme.outline, height: 0),
       ],
     );
   }

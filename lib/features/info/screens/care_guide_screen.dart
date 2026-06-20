@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
 
 class CareGuideScreen extends StatelessWidget {
   const CareGuideScreen({super.key});
@@ -66,8 +65,9 @@ class CareGuideScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
         title: Text('CARE GUIDE', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 3)),
@@ -80,13 +80,13 @@ class CareGuideScreen extends StatelessWidget {
             Container(
               height: 180,
               width: double.infinity,
-              color: AppColors.surface,
+              color: theme.colorScheme.surface,
               child: Stack(
                 children: [
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [AppColors.background.withOpacity(0.3), AppColors.background.withOpacity(0.9)],
+                        colors: [theme.scaffoldBackgroundColor.withValues(alpha: 0.3), theme.scaffoldBackgroundColor.withValues(alpha: 0.9)],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -100,12 +100,12 @@ class CareGuideScreen extends StatelessWidget {
                       children: [
                         Text(
                           'Care Guide',
-                          style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.w700, color: theme.colorScheme.primary),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Keep your Zanny pieces premium for longer.',
-                          style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
+                          style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary),
                         ),
                       ],
                     ),
@@ -127,27 +127,27 @@ class CareGuideScreen extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.border, width: 0.5),
-                  color: AppColors.surface,
+                  border: Border.all(color: theme.colorScheme.outline, width: 0.5),
+                  color: theme.colorScheme.surface,
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.help_outline, size: 20, color: AppColors.textSecondary),
+                    Icon(Icons.help_outline, size: 20, color: theme.colorScheme.secondary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Still unsure?', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                          Text('Still unsure?', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: theme.colorScheme.primary)),
                           Text('Contact our support team for specific care advice.',
-                              style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                              style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.secondary)),
                         ],
                       ),
                     ),
                     const SizedBox(width: 12),
                     GestureDetector(
                       onTap: () => context.push('/contact'),
-                      child: Text('Chat →', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                      child: Text('Chat →', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: theme.colorScheme.primary)),
                     ),
                   ],
                 ),
@@ -179,6 +179,7 @@ class _CareSectionWidgetState extends State<_CareSectionWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       children: [
         InkWell(
@@ -187,14 +188,14 @@ class _CareSectionWidgetState extends State<_CareSectionWidget> {
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Row(
               children: [
-                Icon(widget.data.icon, size: 18, color: AppColors.textPrimary),
+                Icon(widget.data.icon, size: 18, color: theme.colorScheme.primary),
                 const SizedBox(width: 12),
                 Text(
                   widget.data.title,
-                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2, color: AppColors.textPrimary),
+                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 2, color: theme.colorScheme.primary),
                 ),
                 const Spacer(),
-                Icon(_expanded ? Icons.remove : Icons.add, size: 16, color: AppColors.textSecondary),
+                Icon(_expanded ? Icons.remove : Icons.add, size: 16, color: theme.colorScheme.secondary),
               ],
             ),
           ),
@@ -212,13 +213,13 @@ class _CareSectionWidgetState extends State<_CareSectionWidget> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 6),
-                      child: Icon(Icons.circle, size: 4, color: AppColors.textMuted),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Icon(Icons.circle, size: 4, color: theme.colorScheme.secondary.withValues(alpha: 0.5)),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(tip, style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary, height: 1.5)),
+                      child: Text(tip, style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary, height: 1.5)),
                     ),
                   ],
                 ),
@@ -226,7 +227,7 @@ class _CareSectionWidgetState extends State<_CareSectionWidget> {
             ),
           ),
         ),
-        const Divider(color: AppColors.border, height: 0),
+        Divider(color: theme.colorScheme.outline, height: 0),
       ],
     );
   }

@@ -2,10 +2,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'core/supabase/supabase_config.dart';
+import 'core/cloudflare/cloudflare_config.dart';
+import 'core/cloudflare/api_client.dart';
 import 'core/services/notification_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
+
+import 'core/theme/theme_provider.dart';
+import 'core/services/connectivity_service.dart';
+import 'features/info/screens/no_internet_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,8 +29,9 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  // Initialize Supabase
-  await SupabaseConfig.initialize();
+  // Initialize Cloudflare & API Client
+  await CloudflareConfig.initialize();
+  ApiClient.instance.init();
 
   // Initialize Firebase + FCM
   try {
@@ -48,10 +54,28 @@ class ZannyApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final hasInternet = ref.watch(connectivityProvider);
+    final themeMode = ref.watch(themeModeProvider);
+
+    if (!hasInternet) {
+      return MaterialApp(
+        title: 'Zanny Collection',
+        scaffoldMessengerKey: scaffoldMessengerKey,
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeMode,
+        home: const NoInternetScreen(),
+      );
+    }
+
     return MaterialApp.router(
       title: 'Zanny Collection',
+      scaffoldMessengerKey: scaffoldMessengerKey,
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: themeMode,
       routerConfig: router,
     );
   }

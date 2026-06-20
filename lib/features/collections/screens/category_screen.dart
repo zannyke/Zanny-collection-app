@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/product_provider.dart';
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/product_card.dart';
 import '../../../shared/widgets/shimmer_widgets.dart';
+import '../../../shared/widgets/zanny_app_bar.dart';
 
 
 class CategoryScreen extends ConsumerStatefulWidget {
@@ -56,19 +57,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
     final productsAsync = ref.watch(categoryProductsProvider((widget.slug, _sortApiValue)));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
-        ),
-        title: Text(category.name.toUpperCase()),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.shopping_bag_outlined),
-            onPressed: () => context.push('/cart'),
-          ),
-        ],
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: ZannyAppBar(
+        title: category.name,
+        showBack: true,
       ),
       body: Column(
         children: [
@@ -93,18 +85,19 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
                     decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.border),
-                      color: AppColors.surface,
+                      border: Border.all(color: Theme.of(context).colorScheme.outline),
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.sort, size: 16, color: AppColors.textSecondary),
+                        Icon(Icons.sort, size: 16, color: Theme.of(context).colorScheme.secondary),
                         const SizedBox(width: 6),
                         Text(
                           _sortBy,
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: Theme.of(context).colorScheme.secondary,
                           ),
                         ),
                       ],
@@ -162,6 +155,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                     // Grid
                     Expanded(
                       child: GridView.builder(
+                        physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
@@ -170,8 +164,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                           childAspectRatio: 0.65,
                         ),
                         itemCount: filteredProducts.length,
-                        itemBuilder: (context, index) =>
-                            _ProductCard(product: filteredProducts[index]),
+                        itemBuilder: (context, index) => FadeInSlide(
+                          delay: Duration(milliseconds: 50 * index),
+                          child: ProductCard(product: filteredProducts[index]),
+                        ),
                       ),
                     ),
                   ],
@@ -187,8 +183,10 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   void _showSortSheet() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -197,7 +195,7 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
             height: 3,
             margin: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
-              color: AppColors.border,
+              color: Theme.of(context).colorScheme.outline,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -209,11 +207,11 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 2,
-                color: AppColors.textSecondary,
+                color: Theme.of(context).colorScheme.secondary,
               ),
             ),
           ),
-          const Divider(),
+          Divider(color: Theme.of(context).colorScheme.outline),
           for (final option in ['Featured', 'Price: Low to High', 'Price: High to Low', 'Newest'])
             ListTile(
               title: Text(option, style: GoogleFonts.inter(fontSize: 14)),
@@ -229,145 +227,5 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
         ],
       ),
     );
-  }
-}
-
-class _ProductCard extends StatelessWidget {
-  final Product product;
-  const _ProductCard({required this.product});
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeInSlide(
-      child: TactileButton(
-        onTap: () => context.push('/product/${product.id}'),
-        child: Container(
-          color: AppColors.surface,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Image area
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Container(
-                    color: AppColors.surfaceElevated,
-                    child: product.images.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: product.images.first,
-                            fit: BoxFit.cover,
-                            placeholder: (context, url) => Container(
-                              color: AppColors.surfaceElevated,
-                              child: const Center(
-                                child: SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: ZannyLoadingIndicator(
-                                    size: 20,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            errorWidget: (context, url, error) => const Center(
-                              child: Icon(Icons.image_outlined,
-                                  color: AppColors.textMuted, size: 28),
-                            ),
-                          )
-                        : const Center(
-                            child: Icon(Icons.image_outlined,
-                                color: AppColors.textMuted, size: 28),
-                          ),
-                  ),
-                  // Badge
-                  if (product.isNew)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 3),
-                        color: AppColors.textPrimary,
-                        child: Text(
-                          'NEW',
-                          style: GoogleFonts.inter(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
-                            color: AppColors.background,
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (product.isSale)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 3),
-                        color: AppColors.sale,
-                        child: Text(
-                          'SALE',
-                          style: GoogleFonts.inter(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // Product info
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        'KES ${product.price.toStringAsFixed(0)}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      if (product.isOnSale) ...[
-                        const SizedBox(width: 6),
-                        Text(
-                          'KES ${product.originalPrice!.toStringAsFixed(0)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                            decoration: TextDecoration.lineThrough,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),);
   }
 }

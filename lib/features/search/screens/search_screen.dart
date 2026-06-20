@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/product_provider.dart';
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/product_card.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -40,7 +41,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final searchAsync = ref.watch(searchResultsProvider(_query));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(
           'SEARCH',
@@ -54,7 +55,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: TextField(
               controller: _ctrl,
-              autofocus: true,
+              autofocus: false,
               decoration: InputDecoration(
                 hintText: 'Search Zanny Collection...',
                 prefixIcon: const Icon(Icons.search, size: 20),
@@ -90,6 +91,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     return _NoResults(query: _query);
                   }
                   return GridView.builder(
+                    physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                     padding: const EdgeInsets.all(16),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -98,7 +100,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       childAspectRatio: 0.65,
                     ),
                     itemCount: results.length,
-                    itemBuilder: (ctx, i) => _SearchResultCard(product: results[i]),
+                    itemBuilder: (ctx, i) => FadeInSlide(
+                      delay: Duration(milliseconds: 50 * i),
+                      child: ProductCard(product: results[i]),
+                    ),
                   );
                 },
               ),
@@ -134,6 +139,7 @@ class _SearchSuggestions extends StatelessWidget {
                 decoration: BoxDecoration(
                   border: Border.all(color: AppColors.border, width: 0.5),
                   color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   cat.name,
@@ -148,64 +154,7 @@ class _SearchSuggestions extends StatelessWidget {
   }
 }
 
-class _SearchResultCard extends StatelessWidget {
-  final Product product;
-  const _SearchResultCard({required this.product});
 
-  @override
-  Widget build(BuildContext context) {
-    return FadeInSlide(
-      child: TactileButton(
-        onTap: () => context.push('/product/${product.id}'),
-        child: Container(
-          color: AppColors.surface,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                color: AppColors.surfaceElevated,
-                child: product.images.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: product.images.first,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        placeholder: (context, url) => const Center(
-                          child: ZannyLoadingIndicator(
-                            size: 16,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => const Center(
-                          child: Icon(Icons.image_outlined, color: AppColors.textMuted, size: 28),
-                        ),
-                      )
-                    : const Center(
-                        child: Icon(Icons.image_outlined, color: AppColors.textMuted, size: 28),
-                      ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(product.name,
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  const SizedBox(height: 2),
-                  Text('KES ${product.price.toStringAsFixed(0)}',
-                      style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),);
-  }
-}
 
 class _NoResults extends StatelessWidget {
   final String query;

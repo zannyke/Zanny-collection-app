@@ -1,18 +1,26 @@
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/supabase/supabase_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/cloudflare/api_client.dart';
 import '../../core/services/notification_service.dart';
+import '../models/app_user.dart';
 
 // ── Auth State ────────────────────────────────────────────────────────────────
 
 class AuthState {
-  final User? user;
+  final AppUser? user;
   final bool isLoading;
   final String? error;
 
   const AuthState({this.user, this.isLoading = false, this.error});
 
-  AuthState copyWith({User? user, bool? isLoading, String? error, bool clearUser = false}) {
+  AuthState copyWith({
+    AppUser? user,
+    bool? isLoading,
+    String? error,
+    bool clearUser = false,
+  }) {
     return AuthState(
       user: clearUser ? null : (user ?? this.user),
       isLoading: isLoading ?? this.isLoading,
@@ -26,158 +34,165 @@ class AuthState {
 // ── Auth Notifier ─────────────────────────────────────────────────────────────
 
 class AuthNotifier extends Notifier<AuthState> {
-  SupabaseClient get _client => SupabaseConfig.client;
+  static const _userCacheKey = 'cf_cached_user';
 
   @override
   AuthState build() {
-    if (!SupabaseConfig.isConfigured) {
-      return const AuthState();
-    }
-    // Listen to auth state changes
-    try {
-      _client.auth.onAuthStateChange.listen((data) {
-        state = AuthState(user: data.session?.user);
-      });
-      return AuthState(user: _client.auth.currentUser);
-    } catch (e) {
-      print('⚠️ Supabase error in AuthNotifier build: $e');
-      return const AuthState();
-    }
+    _loadFromCache();
+    return const AuthState();
   }
 
-  /// Sign in with email + password
+  ApiClient get _api => ApiClient.instance;
+
+  Future<void> _loadFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final json = prefs.getString(_userCacheKey);
+      final token = await ApiClient.getToken();
+      if (json != null && token != null) {
+        final user = AppUser.fromJson(jsonDecode(json));
+        state = AuthState(user: user);
+        // Refresh profile from server in background
+        _refreshProfile();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _refreshProfile() async {
+    try {
+      final resp = await _api.get('/api/auth/profile');
+      if (resp.statusCode == 200) {
+        final user = AppUser.fromJson(resp.data['user'] as Map<String, dynamic>);
+        state = AuthState(user: user);
+        await _cacheUser(user);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _cacheUser(AppUser user) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userCacheKey, jsonEncode(user.toJson()));
+    } catch (_) {}
+  }
+
+  Future<void> _clearCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_userCacheKey);
+      await ApiClient.clearToken();
+    } catch (_) {}
+  }
+
+  // ── Sign In ──────────────────────────────────────────────────────────────
+
   Future<void> signInWithEmail(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
-    if (!SupabaseConfig.isConfigured) {
-      await Future.delayed(const Duration(seconds: 1));
-      final mockUser = User(
-        id: 'mock_user_email',
-        appMetadata: const {},
-        userMetadata: const {
-          'full_name': 'Zanny Member',
-          'avatar_url': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        },
-        aud: 'authenticated',
-        email: email,
-        createdAt: DateTime.now().toIso8601String(),
-      );
-      state = AuthState(user: mockUser);
-      return;
-    }
     try {
-      final response = await _client.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      state = AuthState(user: response.user);
-      // Save FCM token for this user
-      await NotificationService.saveTokenForUser(response.user?.id);
-    } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
+      final resp = await _api.post('/api/auth/signin', data: {
+        'email': email.trim().toLowerCase(),
+        'password': password,
+      });
+      final token = resp.data['token'] as String;
+      final user = AppUser.fromJson(resp.data['user'] as Map<String, dynamic>);
+      await ApiClient.saveToken(token);
+      await _cacheUser(user);
+      state = AuthState(user: user);
+      // Save FCM token
+      await NotificationService.saveTokenForCurrentUser();
+    } on DioException catch (e) {
+      final msg = _extractError(e);
+      state = state.copyWith(isLoading: false, error: msg);
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Sign in failed. Please try again.');
     }
   }
 
-  /// Register with email + password
+  // ── Sign Up ──────────────────────────────────────────────────────────────
+
   Future<void> signUpWithEmail({
     required String email,
     required String password,
     required String fullName,
   }) async {
     state = state.copyWith(isLoading: true, error: null);
-    if (!SupabaseConfig.isConfigured) {
-      await Future.delayed(const Duration(seconds: 1));
-      final mockUser = User(
-        id: 'mock_user_registered',
-        appMetadata: const {},
-        userMetadata: {
-          'full_name': fullName,
-          'avatar_url': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        },
-        aud: 'authenticated',
-        email: email,
-        createdAt: DateTime.now().toIso8601String(),
-      );
-      state = AuthState(user: mockUser);
-      return;
-    }
     try {
-      final response = await _client.auth.signUp(
-        email: email,
-        password: password,
-        data: {'full_name': fullName},
-      );
-      state = AuthState(user: response.user);
-      await NotificationService.saveTokenForUser(response.user?.id);
-    } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
+      final resp = await _api.post('/api/auth/signup', data: {
+        'email': email.trim().toLowerCase(),
+        'password': password,
+        'full_name': fullName,
+      });
+      final token = resp.data['token'] as String;
+      final user = AppUser.fromJson(resp.data['user'] as Map<String, dynamic>);
+      await ApiClient.saveToken(token);
+      await _cacheUser(user);
+      state = AuthState(user: user);
+      await NotificationService.saveTokenForCurrentUser();
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false, error: _extractError(e));
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Registration failed. Please try again.');
     }
   }
 
-  /// Sign in with Google OAuth
-  Future<void> signInWithGoogle() async {
-    state = state.copyWith(isLoading: true, error: null);
-    if (!SupabaseConfig.isConfigured) {
-      await Future.delayed(const Duration(seconds: 1));
-      final mockUser = User(
-        id: 'mock_user_google',
-        appMetadata: const {},
-        userMetadata: const {
-          'full_name': 'Google Hustler',
-          'avatar_url': 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200',
-        },
-        aud: 'authenticated',
-        email: 'hustler@google.com',
-        createdAt: DateTime.now().toIso8601String(),
-      );
-      state = AuthState(user: mockUser);
-      return;
-    }
-    try {
-      await _client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: 'io.supabase.zannycollection://login-callback',
-      );
-      // Auth state listener will update state on success
-    } on AuthException catch (e) {
-      state = state.copyWith(isLoading: false, error: e.message);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Google sign-in failed.');
-    }
-  }
+  // ── Sign Out ─────────────────────────────────────────────────────────────
 
-  /// Sign out
   Future<void> signOut() async {
     state = state.copyWith(isLoading: true);
-    if (!SupabaseConfig.isConfigured) {
-      await Future.delayed(const Duration(milliseconds: 500));
-      state = const AuthState();
-      return;
-    }
+    await _clearCache();
+    state = const AuthState();
+  }
+
+  // ── Update Profile ───────────────────────────────────────────────────────
+
+  Future<void> updateProfile({
+    required String fullName,
+    required String phone,
+    required String avatarUrl,
+  }) async {
+    final currentUser = state.user;
+    if (currentUser == null) return;
+
     try {
-      await _client.auth.signOut();
-      state = const AuthState();
+      await _api.put('/api/auth/profile', data: {
+        'full_name': fullName,
+        'phone': phone,
+        'avatar_url': avatarUrl,
+      });
+      final updated = currentUser.copyWith(
+        fullName: fullName,
+        phone: phone,
+        avatarUrl: avatarUrl,
+      );
+      state = AuthState(user: updated);
+      await _cacheUser(updated);
     } catch (_) {
-      state = const AuthState();
+      // Update locally even if server fails
+      final updated = currentUser.copyWith(
+        fullName: fullName,
+        phone: phone,
+        avatarUrl: avatarUrl,
+      );
+      state = AuthState(user: updated);
+      await _cacheUser(updated);
     }
   }
 
-  /// Send password reset email
+  // ── Password Reset ───────────────────────────────────────────────────────
+
   Future<void> resetPassword(String email) async {
-    if (!SupabaseConfig.isConfigured) {
-      return;
-    }
+    // Placeholder — implement email reset flow with Cloudflare Email Workers
+    // or a third-party email service (SendGrid, Resend, etc.)
+  }
+
+  String _extractError(DioException e) {
     try {
-      await _client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: 'io.supabase.zannycollection://reset-callback',
-      );
-    } catch (e) {
-      print('⚠️ Supabase error in resetPassword: $e');
-    }
+      final data = e.response?.data;
+      if (data is Map && data.containsKey('error')) return data['error'] as String;
+    } catch (_) {}
+    if (e.response?.statusCode == 409) return 'Email already registered.';
+    if (e.response?.statusCode == 401) return 'Invalid email or password.';
+    return 'Network error. Please try again.';
   }
 }
 
@@ -185,7 +200,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
 final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new);
 
-final currentUserProvider = Provider<User?>((ref) {
+final currentUserProvider = Provider<AppUser?>((ref) {
   return ref.watch(authProvider).user;
 });
 

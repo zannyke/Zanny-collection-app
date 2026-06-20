@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/theme/app_colors.dart';
+
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/animations.dart';
-
+import '../../../core/services/connectivity_service.dart';
+import '../../../features/info/screens/no_internet_screen.dart';
+import '../../../shared/widgets/custom_feedback.dart';
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -37,9 +39,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     });
 
+if (!ref.watch(connectivityProvider)) {
+      return const NoInternetScreen();
+    }
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        backgroundColor: theme.scaffoldBackgroundColor,
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => context.pop()),
         title: Text('SIGN IN', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 3)),
       ),
@@ -54,10 +61,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               // ── Heading ──────────────────────────────────────────────────────
               Text('Welcome Back',
-                  style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                  style: GoogleFonts.playfairDisplay(fontSize: 28, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
               const SizedBox(height: 6),
               Text('Sign in to your Zanny account',
-                  style: GoogleFonts.inter(fontSize: 14, color: AppColors.textSecondary)),
+                  style: GoogleFonts.inter(fontSize: 14, color: theme.colorScheme.secondary)),
               const SizedBox(height: 32),
 
               // ── Error banner ─────────────────────────────────────────────────
@@ -67,21 +74,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   padding: const EdgeInsets.all(12),
                   margin: const EdgeInsets.only(bottom: 20),
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.error.withOpacity(0.5)),
-                    color: AppColors.error.withOpacity(0.08),
+                    border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                    color: theme.colorScheme.error.withValues(alpha: 0.08),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: AppColors.error, size: 16),
+                      Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
                       const SizedBox(width: 8),
                       Expanded(child: Text(authState.error!,
-                          style: GoogleFonts.inter(fontSize: 13, color: AppColors.error))),
+                          style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.error))),
                     ],
                   ),
                 ),
 
               // ── Email ────────────────────────────────────────────────────────
-              _FieldLabel('EMAIL'),
+              const _FieldLabel('EMAIL'),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _emailCtrl,
@@ -97,7 +104,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               const SizedBox(height: 20),
 
               // ── Password ─────────────────────────────────────────────────────
-              _FieldLabel('PASSWORD'),
+              const _FieldLabel('PASSWORD'),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _passwordCtrl,
@@ -109,7 +116,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   suffixIcon: IconButton(
                     icon: Icon(
                       _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      color: AppColors.textSecondary, size: 20,
+                      color: theme.colorScheme.secondary, size: 20,
                     ),
                     onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
@@ -127,7 +134,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: TextButton(
                   onPressed: _showForgotPassword,
                   child: Text('Forgot Password?',
-                      style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+                      style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.secondary)),
                 ),
               ),
               const SizedBox(height: 20),
@@ -144,12 +151,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // ── Divider ──────────────────────────────────────────────────────
               Row(
                 children: [
-                  const Expanded(child: Divider(color: AppColors.border)),
+                  Expanded(child: Divider(color: theme.colorScheme.outline)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('OR', style: GoogleFonts.inter(fontSize: 11, color: AppColors.textSecondary)),
+                    child: Text('OR', style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.secondary)),
                   ),
-                  const Expanded(child: Divider(color: AppColors.border)),
+                  Expanded(child: Divider(color: theme.colorScheme.outline)),
                 ],
               ),
               const SizedBox(height: 20),
@@ -157,8 +164,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               // ── Google Sign In ───────────────────────────────────────────────
               PremiumButton(
                 text: 'CONTINUE WITH GOOGLE',
-                onPressed: () => ref.read(authProvider.notifier).signInWithGoogle(),
-                isLoading: authState.isLoading,
+                onPressed: () => ZannyFeedback.showError(
+                  context,
+                  'Google sign-in coming soon. Please use email & password.',
+                ),
+                isLoading: false,
                 type: PremiumButtonType.secondary,
                 icon: Icons.g_mobiledata,
               ),
@@ -169,12 +179,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text("Don't have an account? ",
-                      style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+                      style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
                   GestureDetector(
                     onTap: () => context.pushReplacement('/register'),
                     child: Text('Create Account',
                         style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary, decoration: TextDecoration.underline)),
+                            color: theme.colorScheme.primary, decoration: TextDecoration.underline)),
                   ),
                 ],
               ),
@@ -196,11 +206,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _showForgotPassword() {
     final emailCtrl = TextEditingController(text: _emailCtrl.text);
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (_) => Padding(
         padding: EdgeInsets.only(
           left: 24, right: 24, top: 24,
@@ -210,10 +223,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Reset Password', style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            Text('Reset Password', style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
             const SizedBox(height: 6),
             Text("Enter your email and we'll send a reset link.",
-                style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary)),
+                style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
             const SizedBox(height: 20),
             TextField(
               controller: emailCtrl,
@@ -226,9 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               onPressed: () {
                 ref.read(authProvider.notifier).resetPassword(emailCtrl.text.trim());
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Reset link sent! Check your email.'), behavior: SnackBarBehavior.floating),
-                );
+                ZannyFeedback.showSuccess(context, 'Reset link sent! Check your email.');
               },
             ),
           ],
@@ -242,6 +253,9 @@ class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel(this.text);
   @override
-  Widget build(BuildContext context) => Text(text,
-      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.textSecondary));
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(text,
+        style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: theme.colorScheme.secondary));
+  }
 }
