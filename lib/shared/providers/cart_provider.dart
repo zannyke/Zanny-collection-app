@@ -131,13 +131,26 @@ class CartNotifier extends Notifier<List<CartItem>> {
     final key = '${product.id}_${color}_$size';
     final existing = state.indexWhere((i) => i.key == key);
     List<CartItem> updated;
+
+    int targetQty = qty;
+    if (existing >= 0) {
+      targetQty = state[existing].quantity + qty;
+    }
+
+    // Enforce database stock limit
+    if (targetQty > product.stock) {
+      targetQty = product.stock;
+    }
+
+    if (targetQty <= 0) return; // Cannot add 0 or negative quantities
+
     if (existing >= 0) {
       updated = List<CartItem>.from(state);
       updated[existing] = updated[existing].copyWith(
-        quantity: updated[existing].quantity + qty,
+        quantity: targetQty,
       );
     } else {
-      updated = [...state, CartItem(product: product, selectedColor: color, selectedSize: size, quantity: qty)];
+      updated = [...state, CartItem(product: product, selectedColor: color, selectedSize: size, quantity: targetQty)];
     }
     state = updated;
     await _saveToCache();
@@ -155,7 +168,19 @@ class CartNotifier extends Notifier<List<CartItem>> {
       removeItem(key);
       return;
     }
-    state = state.map((i) => i.key == key ? i.copyWith(quantity: qty) : i).toList();
+
+    final index = state.indexWhere((i) => i.key == key);
+    if (index < 0) return;
+
+    final item = state[index];
+    int targetQty = qty;
+    
+    // Enforce database stock limit
+    if (targetQty > item.product.stock) {
+      targetQty = item.product.stock;
+    }
+
+    state = state.map((i) => i.key == key ? i.copyWith(quantity: targetQty) : i).toList();
     await _saveToCache();
     await _syncToServer();
   }

@@ -59,11 +59,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   void _buyNow(Product product) {
     if (product.sizes.isNotEmpty && _selectedSize == null) return;
+    final finalQty = _quantity > product.stock ? product.stock : _quantity;
+    if (finalQty <= 0) return;
     ref.read(cartProvider.notifier).addItem(
           product,
           _selectedColor ?? '',
           _selectedSize ?? '',
-          _quantity,
+          finalQty,
         );
     context.push('/cart');
   }
@@ -150,7 +152,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
             _loadedProduct = product;
             _selectedColor = product.colors.isNotEmpty ? product.colors.first : null;
             _selectedSize = null;
-            _quantity = 1;
+            _quantity = product.stock > 0 ? 1 : 0;
             _currentImageIndex = 0;
             Future.microtask(() {
               ref.read(userActivityProvider.notifier).recordProductView(product.id);
@@ -581,7 +583,11 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                           _QuantityButton(
                             icon: Icons.add,
-                            onTap: () => setState(() => _quantity++),
+                            onTap: () {
+                              if (_quantity < product.stock) {
+                                setState(() => _quantity++);
+                              }
+                            },
                           ),
                         ],
                       ),
@@ -601,53 +607,78 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                         ),
 
-                      Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton(
-                              onPressed: () => _addToCart(product),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: theme.colorScheme.primary, width: 1.5),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
+                      if (product.stock <= 0)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.outline.withValues(alpha: 0.3),
+                              disabledBackgroundColor: theme.colorScheme.outline.withValues(alpha: 0.3),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
                               ),
-                              child: Text(
-                                _addedToCart ? 'ADDED ✓' : 'ADD TO CART',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  letterSpacing: 1,
-                                  color: theme.colorScheme.primary,
-                                ),
+                            ),
+                            child: Text(
+                              'OUT OF STOCK',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                letterSpacing: 1,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () => _buyNow(product),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(30),
+                        )
+                      else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => _addToCart(product),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
                                 ),
-                              ),
-                              child: Text(
-                                'BUY NOW',
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  letterSpacing: 1,
+                                child: Text(
+                                  _addedToCart ? 'ADDED ✓' : 'ADD TO CART',
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    letterSpacing: 1,
+                                    color: theme.colorScheme.primary,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => _buyNow(product),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.black,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                ),
+                                child: Text(
+                                  'BUY NOW',
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
 
                       const SizedBox(height: 28),
                       Divider(color: theme.colorScheme.outline),
@@ -820,11 +851,13 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   void _addToCart(Product product) {
     if (product.sizes.isNotEmpty && _selectedSize == null) return;
+    final finalQty = _quantity > product.stock ? product.stock : _quantity;
+    if (finalQty <= 0) return;
     ref.read(cartProvider.notifier).addItem(
           product,
           _selectedColor ?? '',
           _selectedSize ?? '',
-          _quantity,
+          finalQty,
         );
     setState(() => _addedToCart = true);
     Future.delayed(const Duration(seconds: 2), () {
