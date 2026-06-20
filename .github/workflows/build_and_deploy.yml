@@ -1,0 +1,86 @@
+name: Build and Deploy Release APK
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Deploy APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Node.js & Wrangler
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Extract App Version
+        id: get_version
+        run: |
+          VERSION_LINE=$(grep 'version: ' pubspec.yaml)
+          VERSION_RAW=${VERSION_LINE#version: }
+          VERSION_NAME=${VERSION_RAW%+*}
+          BUILD_NUMBER=${VERSION_RAW#*+}
+          echo "VERSION_NAME=$VERSION_NAME" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+          echo "App Version: $VERSION_NAME, Build: $BUILD_NUMBER"
+
+      - name: Build Android APK
+        env:
+          CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
+          CF_R2_PUBLIC_URL: ${{ secrets.CF_R2_PUBLIC_URL }}
+        run: |
+          flutter build apk --release \
+            --dart-define=CF_WORKER_URL=$CF_WORKER_URL \
+            --dart-define=CF_R2_PUBLIC_URL=$CF_R2_PUBLIC_URL
+
+      - name: Rename & Prepare APK
+        run: |
+          APK_DIR="build/app/outputs/flutter-apk"
+          mv "$APK_DIR/app-release.apk" "$APK_DIR/zanny_collection_v$VERSION_NAME.apk"
+          echo "Prepared $APK_DIR/zanny_collection_v$VERSION_NAME.apk"
+
+      - name: Upload APK to Cloudflare R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          npx wrangler r2 object put "${{ secrets.CF_R2_BUCKET_NAME }}/apks/zanny_collection_v$VERSION_NAME.apk" \
+            --file="build/app/outputs/flutter-apk/zanny_collection_v$VERSION_NAME.apk"
+
+      - name: Generate and Upload version.json to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+        run: |
+          cat <<EOF > version.json
+          {
+            "version": "$VERSION_NAME",
+            "build": $BUILD_NUMBER,
+            "apk_url": "${{ secrets.CF_R2_PUBLIC_URL }}/apks/zanny_collection_v$VERSION_NAME.apk",
+            "changelog": "Released automatically via GitHub Actions from commit: ${{ github.event.head_commit.message }}"
+          }
+          EOF
+          npx wrangler r2 object put "${{ secrets.CF_R2_BUCKET_NAME }}/version.json" --file=version.json
+

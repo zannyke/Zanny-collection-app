@@ -1,0 +1,24 @@
+name = "zanny-collection-api"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ── D1 Database binding ─────────────────────────────────────────────────────
+[[d1_databases]]
+binding = "DB"
+database_name = "zanny-collection-db"
+database_id = "45211bea-5e32-4507-9863-7acac07a2f12"
+
+# ── R2 Storage binding ──────────────────────────────────────────────────────
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "zanny-images"
+
+# ── Secrets (set via: wrangler secret put JWT_SECRET) ───────────────────────
+# JWT_SECRET must be set as a secret, not in this file
+
+# ── Routes (match your domain) ──────────────────────────────────────────────
+# Uncomment and update when you add a custom domain:
+# routes = [
+#   { pattern = "api.zannycollection.com/*", zone_name = "zannycollection.com" }
+# ]
