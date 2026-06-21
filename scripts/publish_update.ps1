@@ -3,9 +3,9 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $workerUrl   = "https://zanny-collection-api.zannykenya254.workers.dev"
-$version     = "1.0.10"
-$build       = 22
-$changelog   = "Implement native push notification options for product drops, automatic FCM broadcast alerts for app updates, and static analysis compilation checks."
+$version     = "1.0.12"
+$build       = 24
+$changelog   = "Integrate Firebase push notification registration (FCM) on Android device with complete project configuration and automated credentials."
 $adminSecret = "ZannyAdmin2024Secret"
 
 $latestApk = Get-ChildItem -Path "build/app/outputs/flutter-apk" -Filter "zanny_collection_v${version}_*.apk" | Sort-Object LastWriteTime | Select-Object -Last 1

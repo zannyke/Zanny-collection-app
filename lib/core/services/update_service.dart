@@ -36,8 +36,8 @@ class UpdateService {
 
   static const _channel = MethodChannel('com.example.zanny_collection/install');
 
-  static const String currentVersion = '1.0.11';
-  static const int currentBuild = 23;
+  static const String currentVersion = '1.0.12';
+  static const int currentBuild = 24;
 
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
