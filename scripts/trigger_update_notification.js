@@ -3,7 +3,7 @@ const https = require('https');
 const data = JSON.stringify({
   version: "1.0.14",
   build: 26,
-  apk_url: "https://zanny-collection-api.zannykenya254.workers.dev/api/images/zanny_collection_v1.0.13_20260622_0045.apk",
+  apk_url: "https://zanny-collection-api.zannykenya254.workers.dev/api/images/zanny_collection_v1.0.14_20260622_0111.apk",
   changelog: "Push notification functionality successfully verified on your device!"
 });
 
