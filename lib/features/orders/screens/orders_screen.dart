@@ -269,6 +269,8 @@ class _OrderCardState extends State<_OrderCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _buildTrackingStepper(context, order),
+                    
                     // Recipient Delivery Address
                     Text(
                       'SHIPPING DETAILS',
@@ -416,6 +418,109 @@ class _OrderCardState extends State<_OrderCard> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTrackingStepper(BuildContext context, Order order) {
+    final theme = Theme.of(context);
+    final steps = ['Placed', 'Confirmed', 'Shipped', 'Delivering', 'Delivered'];
+    
+    int activeIndex = 0;
+    switch (order.status) {
+      case 'pending':
+        activeIndex = 0;
+        break;
+      case 'confirmed':
+        activeIndex = 1;
+        break;
+      case 'shipped':
+        activeIndex = 2;
+        break;
+      case 'delivering':
+        activeIndex = 3;
+        break;
+      case 'delivered':
+        activeIndex = 4;
+        break;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ORDER STATUS TRACKING',
+          style: GoogleFonts.inter(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.5,
+            color: theme.colorScheme.secondary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(steps.length, (index) {
+            final isActive = index <= activeIndex;
+            final isCurrent = index == activeIndex;
+            return Expanded(
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      // Left line
+                      Expanded(
+                        child: Container(
+                          height: 2,
+                          color: index == 0
+                              ? Colors.transparent
+                              : (isActive ? AppColors.accentGold : theme.colorScheme.outline),
+                        ),
+                      ),
+                      // Circle
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isActive
+                              ? (isCurrent ? AppColors.accentGold : AppColors.accentGold.withValues(alpha: 0.2))
+                              : theme.colorScheme.surface,
+                          border: Border.all(
+                            color: isActive ? AppColors.accentGold : theme.colorScheme.outline,
+                            width: isCurrent ? 4 : 2,
+                          ),
+                        ),
+                      ),
+                      // Right line
+                      Expanded(
+                        child: Container(
+                          height: 2,
+                          color: index == steps.length - 1
+                              ? Colors.transparent
+                              : (index < activeIndex ? AppColors.accentGold : theme.colorScheme.outline),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    steps[index],
+                    style: GoogleFonts.inter(
+                      fontSize: 8,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                      color: isActive ? theme.colorScheme.onSurface : theme.colorScheme.secondary,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 24),
+        const Divider(height: 1, thickness: 0.5),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }
