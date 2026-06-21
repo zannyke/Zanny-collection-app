@@ -10,6 +10,7 @@ import '../../../shared/providers/street_styles_provider.dart';
 import '../../../shared/widgets/product_card.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
 
 
 import '../../../core/services/update_service.dart';
@@ -494,12 +495,7 @@ class _NewArrivalsSection extends ConsumerWidget {
           ],
         );
       },
-      loading: () => const SizedBox(
-        height: 100,
-        child: Center(
-          child: ZannyLoadingIndicator(size: 20),
-        ),
-      ),
+      loading: () => const HorizontalProductShimmer(),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

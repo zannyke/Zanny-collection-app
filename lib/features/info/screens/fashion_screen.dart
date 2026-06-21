@@ -8,11 +8,39 @@ import '../../../shared/providers/street_styles_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/providers/auth_provider.dart';
 
-class FashionScreen extends ConsumerWidget {
+import '../../../shared/widgets/shimmer_widgets.dart';
+
+class FashionScreen extends ConsumerStatefulWidget {
   const FashionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FashionScreen> createState() => _FashionScreenState();
+}
+
+class _FashionScreenState extends ConsumerState<FashionScreen> {
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStyles();
+  }
+
+  Future<void> _fetchStyles() async {
+    final styles = ref.read(streetStylesProvider);
+    if (styles.isEmpty) {
+      setState(() => _isLoading = true);
+    }
+    try {
+      await ref.read(streetStylesProvider.notifier).fetchStyles();
+    } catch (_) {}
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final styles = ref.watch(streetStylesProvider);
     final theme = Theme.of(context);
 
@@ -32,37 +60,100 @@ class FashionScreen extends ConsumerWidget {
           ),
         ),
       ),
-      body: styles.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.style_outlined,
-                    color: theme.colorScheme.secondary.withValues(alpha: 0.5),
-                    size: 48,
+      body: _isLoading
+          ? const _StyleShimmerList()
+          : styles.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.style_outlined,
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No style lookbooks posted yet.',
+                        style: GoogleFonts.inter(
+                          color: theme.colorScheme.secondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No style lookbooks posted yet.',
-                    style: GoogleFonts.inter(
-                      color: theme.colorScheme.secondary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                )
+              : ListView.builder(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  itemCount: styles.length,
+                  itemBuilder: (context, index) {
+                    final style = styles[index];
+                    return _StylePostCard(style: style);
+                  },
+                ),
+    );
+  }
+}
+
+class _StyleShimmerList extends StatelessWidget {
+  const _StyleShimmerList();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 2,
+      itemBuilder: (context, _) => ZannyShimmer(
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Theme.of(context).colorScheme.outline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.shimmerBase),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(width: 80, height: 12, color: AppColors.shimmerBase),
+                      const SizedBox(height: 6),
+                      Container(width: 50, height: 10, color: AppColors.shimmerBase),
+                    ],
                   ),
                 ],
               ),
-            )
-          : ListView.builder(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: styles.length,
-              itemBuilder: (context, index) {
-                final style = styles[index];
-                return _StylePostCard(style: style);
-              },
-            ),
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                height: 260,
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: AppColors.shimmerBase),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Container(width: 24, height: 24, color: AppColors.shimmerBase),
+                  const SizedBox(width: 12),
+                  Container(width: 24, height: 24, color: AppColors.shimmerBase),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

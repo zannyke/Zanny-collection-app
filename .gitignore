@@ -212,5 +212,15 @@ migrate.cfg
 **/ios/Runner/xspageshow/
 **/ios/Runner/xspopstate/
 **/ios/Runner/xshashchange/
-**/ios/Runner/xshistory/
-Podfile.lock
+**/ios/Runner/Podfile.lock
+
+# Wrangler and Android build files
+.wrangler/
+android/build/
+*.apk
+how a product info should be displayed in the.jpeg
+upload_response.json
+version.json
+scratch/
+
+

@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-import '../../../shared/providers/addresses_provider.dart';
-import '../../../shared/providers/orders_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
@@ -202,8 +199,6 @@ class _OrderSummary extends ConsumerWidget {
     const shipping = 250.0;
     final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
-    final defaultAddress = ref.watch(defaultAddressProvider);
-    final cartItems = ref.watch(cartProvider);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -243,191 +238,12 @@ class _OrderSummary extends ConsumerWidget {
                 context.push('/login');
                 return;
               }
-
-              if (defaultAddress == null) {
-                _showCheckoutAddressDialog(context, ref, cartItems, total + shipping, user);
-              } else {
-                _placeOrderAndRedirect(
-                  context: context,
-                  ref: ref,
-                  items: cartItems,
-                  total: total + shipping,
-                  address: defaultAddress,
-                );
-              }
+              context.push('/checkout');
             },
             text: 'PROCEED TO CHECKOUT',
             type: PremiumButtonType.primary,
           ),
         ],
-      ),
-    );
-  }
-
-  void _placeOrderAndRedirect({
-    required BuildContext context,
-    required WidgetRef ref,
-    required List<CartItem> items,
-    required double total,
-    required Address address,
-  }) async {
-    try {
-      final newOrder = await ref.read(ordersProvider.notifier).placeOrder(
-            items: items,
-            totalAmount: total,
-            deliveryAddress: '${address.streetAddress}, ${address.city}',
-            recipientName: address.recipientName,
-            recipientPhone: address.phone,
-          );
-      if (context.mounted) {
-        ZannyFeedback.showSuccess(context, 'Order placed successfully!');
-        context.go('/order-success', extra: newOrder);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ZannyFeedback.showError(context, 'Failed to place order: $e');
-      }
-    }
-  }
-
-  void _showCheckoutAddressDialog(
-    BuildContext context,
-    WidgetRef ref,
-    List<CartItem> items,
-    double totalAmount,
-    dynamic user,
-  ) {
-    final theme = Theme.of(context);
-    final nameController = TextEditingController(text: user.userMetadata?['full_name'] ?? '');
-    final phoneController = TextEditingController(text: user.userMetadata?['phone'] ?? '');
-    final addressController = TextEditingController();
-    final cityController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.colorScheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'DELIVERY INFO',
-          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 2),
-        ),
-        content: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildDialogLabel(context, 'RECIPIENT NAME'),
-                TextFormField(
-                  controller: nameController,
-                  style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  decoration: _dialogInputDecoration(context, 'e.g. John Doe'),
-                ),
-                const SizedBox(height: 12),
-                _buildDialogLabel(context, 'PHONE NUMBER'),
-                TextFormField(
-                  controller: phoneController,
-                  style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
-                  keyboardType: TextInputType.phone,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  decoration: _dialogInputDecoration(context, 'e.g. +254 712 345678'),
-                ),
-                const SizedBox(height: 12),
-                _buildDialogLabel(context, 'STREET ADDRESS / HOUSE NO.'),
-                TextFormField(
-                  controller: addressController,
-                  style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  decoration: _dialogInputDecoration(context, 'e.g. Apartment 4B, Ngong Road'),
-                ),
-                const SizedBox(height: 12),
-                _buildDialogLabel(context, 'CITY / TOWN'),
-                TextFormField(
-                  controller: cityController,
-                  style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                  decoration: _dialogInputDecoration(context, 'e.g. Nairobi'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: theme.colorScheme.secondary)),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              final addr = Address(
-                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                recipientName: nameController.text.trim(),
-                phone: phoneController.text.trim(),
-                streetAddress: addressController.text.trim(),
-                city: cityController.text.trim(),
-                postalCode: '',
-                isDefault: true,
-              );
-              await ref.read(addressesProvider.notifier).addAddress(addr);
-              if (context.mounted) {
-                Navigator.pop(context);
-                _placeOrderAndRedirect(
-                  context: context,
-                  ref: ref,
-                  items: items,
-                  total: totalAmount,
-                  address: addr,
-                );
-              }
-            },
-            child: Text('Confirm Order', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDialogLabel(BuildContext context, String text) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4.0, left: 4.0),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(
-          fontSize: 8,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1,
-          color: theme.colorScheme.secondary,
-        ),
-      ),
-    );
-  }
-
-  InputDecoration _dialogInputDecoration(BuildContext context, String hint) {
-    final theme = Theme.of(context);
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: theme.colorScheme.secondary.withValues(alpha: 0.5), fontSize: 12),
-      filled: true,
-      fillColor: theme.scaffoldBackgroundColor,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: theme.colorScheme.outline),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: theme.colorScheme.outline),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide(color: theme.colorScheme.primary),
       ),
     );
   }

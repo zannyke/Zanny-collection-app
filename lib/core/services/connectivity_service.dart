@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,13 +23,24 @@ class ConnectivityService {
 }
 
 class ConnectivityNotifier extends StateNotifier<bool> {
+  Timer? _timer;
+
   ConnectivityNotifier() : super(true) {
     checkConnection();
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => checkConnection());
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
   }
 
   Future<void> checkConnection() async {
     final hasInternet = await ConnectivityService.hasInternetConnection();
-    state = hasInternet;
+    if (mounted) {
+      state = hasInternet;
+    }
   }
 }
 
