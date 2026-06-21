@@ -54,6 +54,8 @@ class AuthNotifier extends Notifier<AuthState> {
         state = AuthState(user: user);
         // Refresh profile from server in background
         _refreshProfile();
+        // Upload FCM token on app launch for signed-in users
+        NotificationService.saveTokenForCurrentUser();
       }
     } catch (_) {}
   }
