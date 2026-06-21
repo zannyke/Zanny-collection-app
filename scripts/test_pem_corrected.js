@@ -1,5 +1,3 @@
-const cp = require('child_process');
-
 const privateKey = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDbHMCdZfb8iVjL
 0BwvUhDkuVu30UWHh3Rtb/aj5iRSEWMWQcL66GOD5+3JVKr4W4wV0I2NLaxIVDKe
@@ -29,29 +27,16 @@ YTzo99usCZDOtUJKMLnFQ39uEvc3euvGeYjF4Fmx0n4EPTOqxB2mHC2IPWjVWxwz
 Jm8bgJjy4sgJI0SZvOrzJgc=
 -----END PRIVATE KEY-----`;
 
-const cleanPrivateKey = privateKey
+const b64 = privateKey
   .replace(/-----BEGIN PRIVATE KEY-----/, "")
   .replace(/-----END PRIVATE KEY-----/, "")
   .replace(/\s/g, "")
   .replace(/\\n/g, "");
 
-const secrets = {
-  FIREBASE_PROJECT_ID: "zanny-collection",
-  FIREBASE_CLIENT_EMAIL: "firebase-adminsdk-fbsvc@zanny-collection.iam.gserviceaccount.com",
-  FIREBASE_PRIVATE_KEY: cleanPrivateKey
-};
-
-for (const [key, value] of Object.entries(secrets)) {
-  console.log(`==> Setting wrangler secret ${key}...`);
-  try {
-    cp.execSync(`npx wrangler secret put ${key} -c cloudflare-worker/wrangler.toml`, {
-      input: value,
-      stdio: ['pipe', 'inherit', 'inherit']
-    });
-    console.log(`✅ Successfully set ${key}.\n`);
-  } catch (err) {
-    console.error(`❌ Failed to set ${key}:`, err.message);
-    process.exit(1);
-  }
+console.log("Base64 length:", b64.length);
+try {
+  const binary = atob(b64);
+  console.log("Success! Decoded length:", binary.length);
+} catch (err) {
+  console.log("Error:", err.message);
 }
-console.log("🎉 All Firebase secrets successfully uploaded!");

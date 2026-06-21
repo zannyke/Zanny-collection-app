@@ -1,5 +1,3 @@
-const cp = require('child_process');
-
 const privateKey = `-----BEGIN PRIVATE KEY-----
 MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDbHMCdZfb8iVjL
 0BwvUhDkuVu30UWHh3Rtb/aj5iRSEWMWQcL66GOD5+3JVKr4W4wV0I2NLaxIVDKe
@@ -15,8 +13,8 @@ j0c8RRWfbBuDT9WNwaMptOjzfxNvVuBg/TplR7iInMVg3Tb3CR6wCbHkrbolHE/5
 TAQXx/sklxWsUjqQhCAfNOqVXvyOGzaIIkaF+K660QKBgQDzUY8kjWdBcllYapD3
 KwmS2LpPi1dC4Rfvny3BRcnaOhxOV48WVwce0OJG974+LRG29xPvyJcxE3kgd4s9
 AyJEFcnoHFupiJ+78LDFvGC+uQsjL+vreudLhnKhYMRoPcc7jChGLK4wTDs0bFCn
-eFjh6DJLpt7Q6zu17Fiog3yWQKBgQDmiDmIGITZRMUBZE3w1Dz6/ZrPZR8YZybL
-0lFHJeYblYiIS5xC8l5n53ktuweNTHyoPnc1iarhfyfq8ASTJx1GMLTxZFluxAxsCB
+8eFjh6DJLpt7Q6zu17Fiog3yWQKBgQDmiDmIGITZRMUBZE3w1Dz6/ZrPZR8YZybL
+0lFHJeYblYiIS5xC8l5n53ktuweNTHyoPnc1iarhfyfq8ASTJx1GMLTxZFxAxsCB
 p79AzJBd82MVptYs5LM+YflsLMdqubcSWbOUBkMHe3wH0AgCfhmGBbJhYF0vG5cs
 wBUdzkJHBQKBgQCjLDjgfGuYekTshFq/Rv9emTUojvtwAF/69DbM/C5HyNyetR1i
 D+7YfaChkxbjv3m3x655CX5LDRIX8dNQkT9zhWEn5Yya/uKQOPNzR8dhX9rWOBbw
@@ -29,29 +27,26 @@ YTzo99usCZDOtUJKMLnFQ39uEvc3euvGeYjF4Fmx0n4EPTOqxB2mHC2IPWjVWxwz
 Jm8bgJjy4sgJI0SZvOrzJgc=
 -----END PRIVATE KEY-----`;
 
-const cleanPrivateKey = privateKey
-  .replace(/-----BEGIN PRIVATE KEY-----/, "")
-  .replace(/-----END PRIVATE KEY-----/, "")
-  .replace(/\s/g, "")
-  .replace(/\\n/g, "");
-
-const secrets = {
-  FIREBASE_PROJECT_ID: "zanny-collection",
-  FIREBASE_CLIENT_EMAIL: "firebase-adminsdk-fbsvc@zanny-collection.iam.gserviceaccount.com",
-  FIREBASE_PRIVATE_KEY: cleanPrivateKey
-};
-
-for (const [key, value] of Object.entries(secrets)) {
-  console.log(`==> Setting wrangler secret ${key}...`);
+function pemToArrayBuffer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN PRIVATE KEY-----/, "")
+    .replace(/-----END PRIVATE KEY-----/, "")
+    .replace(/\s/g, "")
+    .replace(/\\n/g, "");
+  
+  console.log("Cleaned base64 length:", b64.length);
+  // Check for any non-base64 characters
+  const badChars = b64.match(/[^A-Za-z0-9+/=]/g);
+  if (badChars) {
+    console.log("Found bad characters:", badChars);
+  }
+  
   try {
-    cp.execSync(`npx wrangler secret put ${key} -c cloudflare-worker/wrangler.toml`, {
-      input: value,
-      stdio: ['pipe', 'inherit', 'inherit']
-    });
-    console.log(`✅ Successfully set ${key}.\n`);
+    const binary = atob(b64);
+    console.log("Success! Binary length:", binary.length);
   } catch (err) {
-    console.error(`❌ Failed to set ${key}:`, err.message);
-    process.exit(1);
+    console.error("atob error:", err.message);
   }
 }
-console.log("🎉 All Firebase secrets successfully uploaded!");
+
+pemToArrayBuffer(privateKey);
