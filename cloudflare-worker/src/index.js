@@ -340,6 +340,14 @@ async function handleSignup(request, env) {
     { sub: id, email: em, is_admin: isAdmin, exp: Math.floor(Date.now() / 1000) + 30 * 86400 },
     env.JWT_SECRET
   );
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "USER_SIGNUP",
+    user_id: id,
+    email: em,
+    is_admin: isAdmin,
+    status: "success"
+  }));
   return json({ token, user: { id, email: em, full_name: full_name || '', is_admin: isAdmin } }, 201);
 }
 
@@ -366,6 +374,14 @@ async function handleSignin(request, env) {
     { sub: user.id, email: user.email, is_admin: isAdmin, exp: Math.floor(Date.now() / 1000) + 30 * 86400 },
     env.JWT_SECRET
   );
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "USER_SIGNIN",
+    user_id: user.id,
+    email: user.email,
+    is_admin: isAdmin,
+    status: "success"
+  }));
   return json({
     token,
     user: {
@@ -565,6 +581,14 @@ async function handleCreateProduct(request, env, origin = '') {
   }
   
   const product = await env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(id).first();
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "PRODUCT_CREATED",
+    product_id: id,
+    name: data.name || '',
+    stock: data.stock !== undefined ? data.stock : 10,
+    status: "success"
+  }));
   return json({ product: parseProduct(product, env, origin) }, 201);
 }
 
@@ -598,6 +622,14 @@ async function handleUpdateProduct(id, request, env, origin = '') {
   }
 
   const product = await env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(id).first();
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "PRODUCT_UPDATED",
+    product_id: id,
+    name: data.name || '',
+    stock: data.stock !== undefined ? data.stock : 10,
+    status: "success"
+  }));
   return json({ product: parseProduct(product, env, origin) });
 }
 
@@ -632,6 +664,12 @@ async function handleDeleteProduct(id, request, env) {
   }
 
   await env.DB.prepare('UPDATE products SET is_deleted = 1 WHERE id = ?').bind(id).run();
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "PRODUCT_DELETED",
+    product_id: id,
+    status: "success"
+  }));
   return json({ success: true });
 }
 
@@ -777,8 +815,24 @@ async function handleCreateOrder(request, env) {
 
   try {
     await env.DB.batch(statements);
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "ORDER_CREATED",
+      user_id: payload.sub,
+      order_id: orderId,
+      amount: data.total_amount || 0,
+      payment_method: paymentMethod,
+      status: "success"
+    }));
   } catch (err) {
     console.error("Order batch execution failed:", err);
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event: "ORDER_CREATION_FAILED",
+      user_id: payload.sub,
+      error: err.message || err.toString(),
+      status: "error"
+    }));
     if (err.message && (err.message.includes('Insufficient stock') || err.message.includes('ABORT'))) {
       return json({ error: 'One or more items in your cart are out of stock. Please adjust your cart and try again.' }, 400);
     }
@@ -949,6 +1003,15 @@ async function handleUpdateOrderStatus(orderId, request, env) {
   params.push(orderId);
 
   await env.DB.prepare(query).bind(...params).run();
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "ORDER_STATUS_UPDATED",
+    user_id: userPayload.sub,
+    order_id: orderId,
+    old_status: order.status,
+    new_status: status,
+    status: "success"
+  }));
 
   // If status has changed, perform side effects (emails, inventory, trust system)
   if (order.status !== status) {
@@ -1226,6 +1289,15 @@ async function handlePostFeedback(request, env) {
   await env.DB.prepare(
     'INSERT INTO feedback (id, order_id, product_id, user_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)'
   ).bind(id, order_id, product_id || null, userId, rating, sanitizedComment).run();
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "FEEDBACK_SUBMITTED",
+    user_id: userId,
+    order_id: order_id,
+    product_id: product_id || null,
+    rating: rating,
+    status: "success"
+  }));
 
   // Check if there are any remaining unreviewed items in this order
   const feedbacksResult = await env.DB.prepare(
