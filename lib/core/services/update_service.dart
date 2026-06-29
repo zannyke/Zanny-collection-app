@@ -38,8 +38,8 @@ class UpdateService {
 
   static const _channel = MethodChannel('com.example.zanny_collection/install');
 
-  static const String currentVersion = '1.0.23';
-  static const int currentBuild = 42;
+  static const String currentVersion = '1.0.24';
+  static const int currentBuild = 43;
 
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
@@ -242,12 +242,12 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
       child: Container(
         margin: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: const Color(0xFF070B19), // Rich shades of blue-black
+          color: Colors.white,
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: const Color(0xFF1E3A8A).withValues(alpha: 0.35)), // Royal blue border
+          border: Border.all(color: Colors.black.withValues(alpha: 0.08)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.5),
+              color: Colors.black.withValues(alpha: 0.15),
               blurRadius: 25,
               offset: const Offset(0, 12),
             )
@@ -273,20 +273,36 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                             width: 64,
                             height: 64,
                             decoration: const BoxDecoration(
-                              color: Color(0xFF2563EB), // Primary Blue pulse
+                              color: Color(0xFF38BDF8), // Light Blue pulse
                               shape: BoxShape.circle,
                             ),
                           ),
                         ),
                       ),
-                      Container(
-                        width: 48, height: 48,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E3A8A).withValues(alpha: 0.3), // Soft blue tint
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.25)),
-                        ),
-                        child: const Icon(Icons.cloud_download_rounded, color: Color(0xFF60A5FA), size: 24),
+                      ValueListenableBuilder<double>(
+                        valueListenable: _progress,
+                        builder: (ctx, value, _) {
+                          final isSuccess = value >= 1.0 && _downloading;
+                          return Container(
+                            width: 48, height: 48,
+                            decoration: BoxDecoration(
+                              color: isSuccess
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.1)
+                                  : const Color(0xFF0284C7).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSuccess
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.2)
+                                    : const Color(0xFF0284C7).withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Icon(
+                              isSuccess ? Icons.check_circle_rounded : Icons.cloud_download_rounded,
+                              color: isSuccess ? const Color(0xFF10B981) : const Color(0xFF0284C7),
+                              size: 24,
+                            ),
+                          );
+                        },
                       ),
                     ],
                   ),
@@ -297,7 +313,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                       children: [
                         Text('System Update Available',
                           style: GoogleFonts.inter(
-                            color: Colors.white,
+                            color: Colors.black87,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.2,
@@ -323,7 +339,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                             ),
                             const Padding(
                               padding: EdgeInsets.symmetric(horizontal: 6),
-                              child: Icon(Icons.arrow_forward_rounded, color: Colors.white38, size: 14),
+                              child: Icon(Icons.arrow_forward_rounded, color: Colors.black38, size: 14),
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -351,10 +367,10 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.04),
+                        color: Colors.black.withValues(alpha: 0.05),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close, color: Colors.white54, size: 18),
+                      child: const Icon(Icons.close, color: Colors.black54, size: 18),
                     ),
                   ),
                 ],
@@ -365,7 +381,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF60A5FA), // Light blue heading
+                  color: const Color(0xFF0284C7), // Sky Blue heading
                   letterSpacing: 1.5,
                 ),
               ),
@@ -374,14 +390,14 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B).withValues(alpha: 0.25), // Blue-grey slate container
+                  color: Colors.grey.shade50,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.05)),
+                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
                 ),
                 child: Text(
                   displayChangelog,
                   style: GoogleFonts.inter(
-                    color: const Color(0xFFE2E8F0),
+                    color: Colors.black87,
                     fontSize: 12,
                     height: 1.5,
                   ),
@@ -408,7 +424,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                             children: [
                               // Older version representation (Base orange/yellow track)
                               Container(
-                                color: const Color(0xFFFBBF24), // Orange/yellow
+                                color: Colors.amber.shade200,
                               ),
                               // Newer version overriding progress (Green track overlay)
                               FractionallySizedBox(
@@ -427,12 +443,9 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                                       Text(
                                         'v${UpdateService.currentVersion}',
                                         style: GoogleFonts.inter(
-                                          color: Colors.white,
+                                          color: Colors.black87,
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
-                                          shadows: [
-                                            const Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))
-                                          ],
                                         ),
                                       ),
                                       Text(
@@ -442,7 +455,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                                           fontSize: 12,
                                           fontWeight: FontWeight.w900,
                                           shadows: [
-                                            const Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))
+                                            const Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))
                                           ],
                                         ),
                                       ),
@@ -472,7 +485,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                           Text(
                             value < 1.0 ? 'Downloading new version...' : 'Installing update...',
                             style: GoogleFonts.inter(
-                              color: Colors.white60,
+                              color: Colors.black54,
                               fontSize: 11,
                               fontWeight: FontWeight.w500,
                             ),
@@ -489,8 +502,8 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                       child: OutlinedButton(
                         onPressed: () => Navigator.pop(context),
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white70,
-                          side: BorderSide(color: const Color(0xFF1E3A8A).withValues(alpha: 0.25)),
+                          foregroundColor: Colors.black87,
+                          side: BorderSide(color: Colors.grey.shade300),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           padding: const EdgeInsets.symmetric(vertical: 16),
                         ),
@@ -508,27 +521,27 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                             showDialog(
                               context: context,
                               builder: (ctx) => AlertDialog(
-                                backgroundColor: const Color(0xFF070B19),
+                                backgroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
-                                  side: BorderSide(color: const Color(0xFF1E3A8A).withValues(alpha: 0.35)),
+                                  side: BorderSide(color: Colors.grey.shade300),
                                 ),
                                 title: Text(
                                   'Permission Required',
                                   style: GoogleFonts.inter(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
-                                    color: Colors.white,
+                                    color: Colors.black87,
                                   ),
                                 ),
                                 content: Text(
                                   'To install this update, Zanny Collection needs permission to install unknown apps. Please enable this in the settings page.',
-                                  style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, height: 1.5),
+                                  style: GoogleFonts.inter(fontSize: 13, color: Colors.black54, height: 1.5),
                                 ),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(ctx),
-                                    child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
+                                    child: Text('Cancel', style: GoogleFonts.inter(color: Colors.black54)),
                                   ),
                                   TextButton(
                                     onPressed: () async {
@@ -538,7 +551,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                                     child: Text(
                                       'Open Settings',
                                       style: GoogleFonts.inter(
-                                        color: const Color(0xFF60A5FA),
+                                        color: const Color(0xFF0284C7),
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -561,11 +574,11 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB), // Premium Blue
+                          backgroundColor: const Color(0xFF0284C7), // Light Blue
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          elevation: 2,
+                          elevation: 0,
                         ),
                         child: Text('Update Now', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700)),
                       ),
