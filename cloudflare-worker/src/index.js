@@ -59,6 +59,10 @@ export default {
         response = await handleUpdateProfile(request, env);
       } else if (path === '/api/auth/fcm-token' && method === 'POST') {
         response = await handleFcmToken(request, env);
+      } else if (path === '/api/auth/forgot-password' && method === 'POST') {
+        response = await handleForgotPassword(request, env);
+      } else if (path === '/api/auth/reset-password' && method === 'POST') {
+        response = await handleResetPassword(request, env);
       } else if (path === '/api/upload' && method === 'POST') {
         response = await handleUpload(request, env);
       } else if (path.startsWith('/api/images/') && method === 'GET') {
@@ -433,6 +437,95 @@ async function handleFcmToken(request, env) {
     await env.DB.prepare('UPDATE users SET fcm_token = ? WHERE id = ?').bind(token, payload.sub).run();
   }
   return json({ success: true });
+}
+
+async function handleForgotPassword(request, env) {
+  const { email } = await request.json().catch(() => ({}));
+  if (!email) return jsonError('Email is required', 400);
+  const em = email.trim().toLowerCase();
+
+  // 1. Verify if user exists
+  const user = await env.DB.prepare('SELECT id, full_name, first_name FROM users WHERE email = ?').bind(em).first();
+  if (!user) {
+    // Return success to prevent email enumeration (security best practice)
+    return json({ success: true, message: 'If the email exists, a reset link will be sent.' });
+  }
+
+  // 2. Generate secure token
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour expiry
+
+  // 3. Store token in DB
+  await env.DB.prepare('INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)')
+    .bind(em, token, expiresAt)
+    .run();
+
+  // 4. Send email
+  const name = user.full_name || user.first_name || 'Valued Customer';
+  const resetLink = `https://zannycollection.com/reset-password?token=${token}`;
+  
+  const subject = "Reset Your Zanny Collection Password";
+  const html = `
+    <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+      <h2 style="color: #8e24aa; border-bottom: 2px solid #8e24aa; padding-bottom: 10px;">Password Reset Request</h2>
+      <p>Hello ${name},</p>
+      <p>We received a request to reset your password for your Zanny Collection account. Click the button below to choose a new password:</p>
+      <p style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+        <a href="${resetLink}" style="background-color: #8e24aa; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">RESET PASSWORD</a>
+      </p>
+      <p>This link is valid for the next 60 minutes. If you did not request a password reset, you can safely ignore this email.</p>
+      <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+        Zanny Collection. All rights reserved.
+      </p>
+    </div>
+  `;
+
+  await sendResendEmail(env, em, subject, html);
+  
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "PASSWORD_RESET_REQUESTED",
+    email: em,
+    status: "success"
+  }));
+
+  return json({ success: true, message: 'Reset email sent successfully.' });
+}
+
+async function handleResetPassword(request, env) {
+  const { token, password } = await request.json().catch(() => ({}));
+  if (!token || !password) return jsonError('Token and password are required', 400);
+  if (password.length < 6) return jsonError('Password must be at least 6 characters long', 400);
+
+  // 1. Verify token
+  const reset = await env.DB.prepare('SELECT * FROM password_resets WHERE token = ?').bind(token).first();
+  if (!reset) return jsonError('Invalid or expired reset token', 400);
+
+  // Check expiration
+  if (new Date(reset.expires_at) < new Date()) {
+    await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(reset.email).run();
+    return jsonError('Reset token has expired', 400);
+  }
+
+  // 2. Hash new password
+  const hashObj = await hashPassword(password);
+
+  // 3. Update user password
+  await env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE email = ?')
+    .bind(hashObj.hash, hashObj.salt, reset.email)
+    .run();
+
+  // 4. Delete the token
+  await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(reset.email).run();
+
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "PASSWORD_RESET_COMPLETED",
+    email: reset.email,
+    status: "success"
+  }));
+
+  return json({ success: true, message: 'Password has been reset successfully.' });
 }
 
 // ════════════════════════════════════════════════════════════════════════════

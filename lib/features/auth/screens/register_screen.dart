@@ -201,7 +201,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   Text('Already have an account? ',
                       style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
                   GestureDetector(
-                    onTap: () => context.pushReplacement('/login'),
+                    onTap: () {
+                      ref.read(authProvider.notifier).clearError();
+                      context.pushReplacement('/login');
+                    },
                     child: Text(
                       'Sign In',
                       style: GoogleFonts.inter(

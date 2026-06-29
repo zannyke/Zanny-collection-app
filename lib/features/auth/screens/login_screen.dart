@@ -181,7 +181,10 @@ if (!ref.watch(connectivityProvider)) {
                   Text("Don't have an account? ",
                       style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
                   GestureDetector(
-                    onTap: () => context.pushReplacement('/register'),
+                    onTap: () {
+                      ref.read(authProvider.notifier).clearError();
+                      context.pushReplacement('/register');
+                    },
                     child: Text('Create Account',
                         style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700,
                             color: theme.colorScheme.primary, decoration: TextDecoration.underline)),
@@ -205,6 +208,7 @@ if (!ref.watch(connectivityProvider)) {
   }
 
   void _showForgotPassword() {
+    ref.read(authProvider.notifier).clearError();
     final emailCtrl = TextEditingController(text: _emailCtrl.text);
     final theme = Theme.of(context);
     showModalBottomSheet(
@@ -214,36 +218,73 @@ if (!ref.watch(connectivityProvider)) {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          left: 24, right: 24, top: 24,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Reset Password', style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
-            const SizedBox(height: 6),
-            Text("Enter your email and we'll send a reset link.",
-                style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
-            const SizedBox(height: 20),
-            TextField(
-              controller: emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(hintText: 'your@email.com'),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final authState = ref.watch(authProvider);
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24, right: 24, top: 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
             ),
-            const SizedBox(height: 20),
-            PremiumButton(
-              text: 'SEND RESET LINK',
-              onPressed: () {
-                ref.read(authProvider.notifier).resetPassword(emailCtrl.text.trim());
-                Navigator.pop(context);
-                ZannyFeedback.showSuccess(context, 'Reset link sent! Check your email.');
-              },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Reset Password', style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                const SizedBox(height: 6),
+                Text("Enter your email and we'll send a reset link.",
+                    style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
+                const SizedBox(height: 20),
+                if (authState.error != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                      color: theme.colorScheme.error.withValues(alpha: 0.08),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(authState.error!,
+                            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.error))),
+                      ],
+                    ),
+                  ),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(hintText: 'your@email.com'),
+                ),
+                const SizedBox(height: 20),
+                PremiumButton(
+                  text: 'SEND RESET LINK',
+                  isLoading: authState.isLoading,
+                  onPressed: () async {
+                    if (emailCtrl.text.trim().isEmpty) {
+                      ZannyFeedback.showError(context, 'Please enter your email address');
+                      return;
+                    }
+                    final routerContext = context;
+                    try {
+                      await ref.read(authProvider.notifier).resetPassword(emailCtrl.text.trim());
+                      if (sheetCtx.mounted) {
+                        Navigator.pop(sheetCtx);
+                      }
+                      if (routerContext.mounted) {
+                        ZannyFeedback.showSuccess(routerContext, 'Reset link sent! Check your email.');
+                      }
+                    } catch (_) {
+                      // Error will be updated in authState.error and displayed in the sheet banner
+                    }
+                  },
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        }
       ),
     );
   }

@@ -182,9 +182,24 @@ class AuthNotifier extends Notifier<AuthState> {
 
   // ── Password Reset ───────────────────────────────────────────────────────
 
+  void clearError() {
+    state = state.copyWith(error: null);
+  }
+
   Future<void> resetPassword(String email) async {
-    // Placeholder — implement email reset flow with Cloudflare Email Workers
-    // or a third-party email service (SendGrid, Resend, etc.)
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _api.post('/api/auth/forgot-password', data: {
+        'email': email.trim().toLowerCase(),
+      });
+      state = state.copyWith(isLoading: false);
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false, error: _extractError(e));
+      rethrow;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Failed to request reset link.');
+      rethrow;
+    }
   }
 
   String _extractError(DioException e) {

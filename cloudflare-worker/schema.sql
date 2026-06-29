@@ -160,4 +160,14 @@ CREATE INDEX IF NOT EXISTS idx_feedback_order ON feedback(order_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_product ON feedback(product_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
 
+-- ── Password Resets ──────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS password_resets (
+  email      TEXT PRIMARY KEY,
+  token      TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
+
 
