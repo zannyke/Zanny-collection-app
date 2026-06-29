@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -802,7 +803,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     );
   }
 
-  Future<void> _changeBannerImage(BuildContext context, ThemeData theme) async {
+  Future<void> _pickAndAddBannerSlide(BuildContext context, ThemeData theme, List<String> currentSlides) async {
     final messenger = ScaffoldMessenger.of(context);
     final picker = ImagePicker();
     final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
@@ -817,17 +818,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       final repo = ref.read(adminRepositoryProvider);
       final uploadedUrl = await repo.uploadProductImage(file);
 
+      final updatedSlides = [...currentSlides, uploadedUrl];
+
       final api = ApiClient.instance;
       final response = await api.put(
-        '/api/settings/homepage_banner_url',
-        data: {'value': uploadedUrl},
+        '/api/settings/homepage_banner_slides',
+        data: {'value': jsonEncode(updatedSlides)},
       );
 
       if (response.statusCode == 200) {
-        ref.read(bannerImageProvider.notifier).updateBanner(uploadedUrl);
+        ref.read(bannerImageProvider.notifier).updateSlides(updatedSlides);
         messenger.showSnackBar(
           const SnackBar(
-            content: Text('Homepage banner updated successfully!'),
+            content: Text('Banner slide added successfully!'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -837,7 +840,49 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Failed to update banner: $e'),
+          content: Text('Failed to add banner slide: $e'),
+          backgroundColor: theme.colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingBanner = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteBannerSlide(BuildContext context, ThemeData theme, List<String> currentSlides, int indexToDelete) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final updatedSlides = List<String>.from(currentSlides)..removeAt(indexToDelete);
+
+    setState(() {
+      _updatingBanner = true;
+    });
+
+    try {
+      final api = ApiClient.instance;
+      final response = await api.put(
+        '/api/settings/homepage_banner_slides',
+        data: {'value': jsonEncode(updatedSlides)},
+      );
+
+      if (response.statusCode == 200) {
+        ref.read(bannerImageProvider.notifier).updateSlides(updatedSlides);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Banner slide deleted successfully!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        throw Exception(response.data?['error'] ?? 'Server error');
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete slide: $e'),
           backgroundColor: theme.colorScheme.error,
         ),
       );
@@ -851,12 +896,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   }
 
   Widget _buildHomepageBannerSection(BuildContext context, ThemeData theme) {
-    final bannerUrl = ref.watch(bannerImageProvider);
+    final bannerSlides = ref.watch(bannerImageProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'HOMEPAGE HERO BANNER',
+          'HOMEPAGE HERO SLIDESHOW',
           style: GoogleFonts.inter(
             fontSize: 10,
             fontWeight: FontWeight.w800,
@@ -866,7 +911,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Upload and configure the dynamic banner image displayed at the top of the homepage.',
+          'Upload up to 10 images to cycle concurrently as a sliding carousel on the top of the homepage.',
           style: GoogleFonts.inter(color: theme.colorScheme.secondary, fontSize: 12.5, height: 1.4),
         ),
         const SizedBox(height: 24),
@@ -881,26 +926,80 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Current Banner Preview',
+                'Current Slideshow Items (${bannerSlides.length})',
                 style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface),
               ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: CachedNetworkImage(
-                    imageUrl: bannerUrl,
-                    fit: BoxFit.cover,
-                    placeholder: (ctx, url) => Container(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
-                    errorWidget: (ctx, url, err) => Container(
-                      color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                      child: const Icon(Icons.broken_image_outlined, size: 36),
-                    ),
+              const SizedBox(height: 16),
+              if (bannerSlides.isEmpty)
+                Container(
+                  height: 120,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Text('No slides uploaded yet.'),
+                  ),
+                )
+              else
+                SizedBox(
+                  height: 180,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: bannerSlides.length,
+                    itemBuilder: (context, index) {
+                      return Container(
+                        margin: const EdgeInsets.only(right: 14),
+                        width: 120,
+                        child: Stack(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                height: 180,
+                                width: 120,
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: CachedNetworkImage(
+                                  imageUrl: bannerSlides[index],
+                                  fit: BoxFit.cover,
+                                  placeholder: (ctx, url) => Container(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+                                  errorWidget: (ctx, url, err) => Container(
+                                    color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                                    child: const Icon(Icons.broken_image_outlined, size: 24),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 6,
+                              right: 6,
+                              child: GestureDetector(
+                                onTap: _updatingBanner ? null : () => _deleteBannerSlide(context, theme, bannerSlides, index),
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.delete,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -910,10 +1009,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  onPressed: _updatingBanner ? null : () => _changeBannerImage(context, theme),
+                  onPressed: _updatingBanner || bannerSlides.length >= 10
+                      ? null
+                      : () => _pickAndAddBannerSlide(context, theme, bannerSlides),
                   child: _updatingBanner
                       ? const ShimmerPlaceholder(width: 20, height: 20, borderRadius: 10)
-                      : Text('CHANGE BANNER IMAGE', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                      : Text(
+                          bannerSlides.length >= 10 ? 'MAXIMUM SLIDES REACHED' : 'ADD NEW SLIDE IMAGE',
+                          style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 1),
+                        ),
                 ),
               ),
             ],

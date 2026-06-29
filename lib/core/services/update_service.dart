@@ -38,8 +38,8 @@ class UpdateService {
 
   static const _channel = MethodChannel('com.example.zanny_collection/install');
 
-  static const String currentVersion = '1.0.24';
-  static const int currentBuild = 43;
+  static const String currentVersion = '1.0.25';
+  static const int currentBuild = 44;
 
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
@@ -172,10 +172,6 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
   bool _downloading = false;
   final ValueNotifier<double> _progress = ValueNotifier(0.0);
 
-  late AnimationController _pulseController;
-  late Animation<double> _pulseScale;
-  late Animation<double> _pulseOpacity;
-
   late AnimationController _entryController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _slideAnimation;
@@ -183,19 +179,6 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
   @override
   void initState() {
     super.initState();
-
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-
-    _pulseScale = Tween<double>(begin: 0.95, end: 1.3).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-
-    _pulseOpacity = Tween<double>(begin: 0.35, end: 0.05).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
 
     _entryController = AnimationController(
       vsync: this,
@@ -212,7 +195,6 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _entryController.dispose();
     _progress.dispose();
     super.dispose();
@@ -261,50 +243,32 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
             children: [
               Row(
                 children: [
-                  // Pulsing download icon
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      ScaleTransition(
-                        scale: _pulseScale,
-                        child: FadeTransition(
-                          opacity: _pulseOpacity,
-                          child: Container(
-                            width: 64,
-                            height: 64,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF38BDF8), // Light Blue pulse
-                              shape: BoxShape.circle,
-                            ),
+                  // Download/Success icon
+                  ValueListenableBuilder<double>(
+                    valueListenable: _progress,
+                    builder: (ctx, value, _) {
+                      final isSuccess = value >= 1.0 && _downloading;
+                      return Container(
+                        width: 56, height: 56,
+                        decoration: BoxDecoration(
+                          color: isSuccess
+                              ? const Color(0xFF10B981).withValues(alpha: 0.08)
+                              : Colors.grey.shade100,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSuccess
+                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                : Colors.grey.shade300,
+                            width: 1.5,
                           ),
                         ),
-                      ),
-                      ValueListenableBuilder<double>(
-                        valueListenable: _progress,
-                        builder: (ctx, value, _) {
-                          final isSuccess = value >= 1.0 && _downloading;
-                          return Container(
-                            width: 48, height: 48,
-                            decoration: BoxDecoration(
-                              color: isSuccess
-                                  ? const Color(0xFF10B981).withValues(alpha: 0.1)
-                                  : const Color(0xFF0284C7).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSuccess
-                                    ? const Color(0xFF10B981).withValues(alpha: 0.2)
-                                    : const Color(0xFF0284C7).withValues(alpha: 0.2),
-                              ),
-                            ),
-                            child: Icon(
-                              isSuccess ? Icons.check_circle_rounded : Icons.cloud_download_rounded,
-                              color: isSuccess ? const Color(0xFF10B981) : const Color(0xFF0284C7),
-                              size: 24,
-                            ),
-                          );
-                        },
-                      ),
-                    ],
+                        child: Icon(
+                          isSuccess ? Icons.check_circle_rounded : Icons.cloud_download_rounded,
+                          color: isSuccess ? const Color(0xFF10B981) : Colors.black87,
+                          size: 26,
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -381,7 +345,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF0284C7), // Sky Blue heading
+                  color: Colors.black54, // Muted grey heading
                   letterSpacing: 1.5,
                 ),
               ),
@@ -551,7 +515,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                                     child: Text(
                                       'Open Settings',
                                       style: GoogleFonts.inter(
-                                        color: const Color(0xFF0284C7),
+                                        color: Colors.black87,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -574,7 +538,7 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0284C7), // Light Blue
+                          backgroundColor: Colors.black87, // Black matching streetwear system colors
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           padding: const EdgeInsets.symmetric(vertical: 16),

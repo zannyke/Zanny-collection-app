@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -133,7 +134,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         slivers: [
           // Hero Banner
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: _HeroBanner(),
           ),
           // Section title
@@ -192,13 +193,56 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
-
 // ── Hero Banner ────────────────────────────────────────────────────────────────
-class _HeroBanner extends ConsumerWidget {
+class _HeroBanner extends ConsumerStatefulWidget {
+  const _HeroBanner();
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bannerUrl = ref.watch(bannerImageProvider);
+  ConsumerState<_HeroBanner> createState() => _HeroBannerState();
+}
+
+class _HeroBannerState extends ConsumerState<_HeroBanner> {
+  late PageController _pageController;
+  int _currentPage = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: 0);
+  }
+
+  void _startTimer(int pageCount) {
+    _timer?.cancel();
+    if (pageCount <= 1) return;
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted) return;
+      final nextPage = (_currentPage + 1) % pageCount;
+      _pageController.animateToPage(
+        nextPage,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOutCubic,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final slides = ref.watch(bannerImageProvider);
     final screenHeight = MediaQuery.of(context).size.height;
+    
+    // Start or reset timer based on current slide count
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startTimer(slides.length);
+    });
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Container(
@@ -213,87 +257,149 @@ class _HeroBanner extends ConsumerWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              CachedNetworkImage(
-                imageUrl: bannerUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  color: AppColors.surfaceElevated,
-                ),
-                errorWidget: (context, url, error) => Container(
-                  color: AppColors.surfaceElevated,
+              // Sliding banner images
+              PageView.builder(
+                controller: _pageController,
+                onPageChanged: (index) {
+                  setState(() {
+                    _currentPage = index;
+                  });
+                },
+                itemCount: slides.length,
+                itemBuilder: (context, index) {
+                  return CachedNetworkImage(
+                    imageUrl: slides[index],
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      color: AppColors.surfaceElevated,
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      color: AppColors.surfaceElevated,
+                    ),
+                  );
+                },
+              ),
+              // Dark gradient overlay
+              IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.25),
+                        Colors.black.withValues(alpha: 0.8),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-              // Gradient overlay
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.background.withValues(alpha: 0.1),
-                      AppColors.background.withValues(alpha: 0.8),
+              // NEW SEASON badge on the top right
+              Positioned(
+                top: 24,
+                right: 24,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.85), width: 1.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'NEW SEASON',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 3,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              // Centered Main Text & Shop Now Button
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 40), // Push down slightly to balance top badge
+                      Text(
+                        'Premium Products\nfor Those on\nthe Way Up',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.playfairDisplay(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.25,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Builder(builder: (ctx) {
+                        return GestureDetector(
+                          onTap: () => ctx.go('/collections'),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(30),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                )
+                              ]
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'SHOP NOW',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 2.5,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.arrow_forward_rounded,
+                                    color: Colors.black87, size: 16),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
               ),
-              // Content
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppColors.textPrimary.withValues(alpha: 0.5)),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'NEW SEASON',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 3,
-                          color: AppColors.textPrimary,
+              // Slide dot indicators at the bottom center
+              if (slides.length > 1)
+                Positioned(
+                  bottom: 24,
+                  left: 0,
+                  right: 0,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(
+                      slides.length,
+                      (index) => AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: _currentPage == index ? 20 : 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: _currentPage == index
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Premium\nProducts for\nThose on the\nWay Up',
-                      style: GoogleFonts.playfairDisplay(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Builder(builder: (ctx) {
-                      return GestureDetector(
-                        onTap: () => ctx.go('/collections'),
-                        child: Row(
-                          children: [
-                            Text(
-                              'SHOP NOW',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 2,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(Icons.arrow_forward,
-                                color: AppColors.textPrimary, size: 16),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -301,7 +407,6 @@ class _HeroBanner extends ConsumerWidget {
     );
   }
 }
-
 // ── Category Card ──────────────────────────────────────────────────────────────
 class _CategoryCard extends ConsumerWidget {
   final ProductCategory category;

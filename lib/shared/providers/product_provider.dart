@@ -353,26 +353,33 @@ final adminReviewsProvider = FutureProvider<List<AdminReview>>((ref) async {
   return raw.map((j) => AdminReview.fromJson(Map<String, dynamic>.from(j))).toList();
 });
 
-final bannerImageProvider = StateNotifierProvider<BannerImageNotifier, String>((ref) {
-  return BannerImageNotifier();
+final bannerImageProvider = StateNotifierProvider<BannerSlidesNotifier, List<String>>((ref) {
+  return BannerSlidesNotifier();
 });
 
-class BannerImageNotifier extends StateNotifier<String> {
-  BannerImageNotifier() : super('https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1000') {
-    loadBanner();
+class BannerSlidesNotifier extends StateNotifier<List<String>> {
+  BannerSlidesNotifier() : super(['https://images.unsplash.com/photo-1483985988355-763728e1935b']) {
+    loadBannerSlides();
   }
 
-  Future<void> loadBanner() async {
+  Future<void> loadBannerSlides() async {
     try {
-      final response = await ApiClient.instance.get('/api/settings/homepage_banner_url');
+      final response = await ApiClient.instance.get('/api/settings/homepage_banner_slides');
       if (response.statusCode == 200 && response.data != null && response.data['value'] != null) {
-        state = response.data['value'] as String;
+        final value = response.data['value'] as String;
+        final List<dynamic> parsed = jsonDecode(value) as List<dynamic>;
+        state = parsed.map((e) => e.toString()).toList();
+      } else {
+        final oldResponse = await ApiClient.instance.get('/api/settings/homepage_banner_url');
+        if (oldResponse.statusCode == 200 && oldResponse.data != null && oldResponse.data['value'] != null) {
+          state = [oldResponse.data['value'] as String];
+        }
       }
     } catch (_) {}
   }
 
-  void updateBanner(String newUrl) {
-    state = newUrl;
+  void updateSlides(List<String> newSlides) {
+    state = newSlides;
   }
 }
 

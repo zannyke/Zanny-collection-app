@@ -21,13 +21,8 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // Status bar style
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light.copyWith(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: const Color(0xFF0A0A0A),
-    systemNavigationBarIconBrightness: Brightness.light,
-  ));
+  // Enable edge-to-edge drawing on Android
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   // Initialize Cloudflare & API Client
   await CloudflareConfig.initialize();
@@ -56,6 +51,19 @@ class ZannyApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     final hasInternet = ref.watch(connectivityProvider);
     final themeMode = ref.watch(themeModeProvider);
+
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+      systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+    ));
 
     if (!hasInternet) {
       return MaterialApp(
