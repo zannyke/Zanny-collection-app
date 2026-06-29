@@ -1,11 +1,8 @@
+const fs = require('fs');
 const https = require('https');
 
-const data = JSON.stringify({
-  version: "1.0.14",
-  build: 28,
-  apk_url: "https://zanny-collection-api.zannykenya254.workers.dev/api/images/zanny_collection_v1.0.14_20260622_0111.apk",
-  changelog: "Notification system fully operational!"
-});
+const versionData = JSON.parse(fs.readFileSync('version.json', 'utf8'));
+const data = JSON.stringify(versionData);
 
 const options = {
   hostname: 'zanny-collection-api.zannykenya254.workers.dev',

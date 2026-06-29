@@ -9,6 +9,7 @@ import '../../../shared/providers/product_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/zanny_app_bar.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
 
 class CollectionsScreen extends ConsumerWidget {
   const CollectionsScreen({super.key});
@@ -96,11 +97,9 @@ class _BigCategoryCard extends ConsumerWidget {
                         ? CachedNetworkImage(
                             imageUrl: imageUrl,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => Center(
-                              child: ZannyLoadingIndicator(
-                                size: 20,
-                                color: Theme.of(context).colorScheme.secondary,
-                              ),
+                            placeholder: (context, url) => const ShimmerBox(
+                              width: double.infinity,
+                              height: double.infinity,
                             ),
                             errorWidget: (context, url, error) => Center(
                               child: Icon(Icons.image_outlined,

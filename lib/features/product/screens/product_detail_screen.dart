@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'product_reviews_screen.dart';
+import '../../../core/theme/app_colors.dart';
 
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
@@ -11,6 +13,7 @@ import '../../../shared/providers/user_activity_provider.dart';
 import '../../../shared/providers/wishlist_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
 
 class ProductDetailScreen extends ConsumerStatefulWidget {
   final String productId;
@@ -73,6 +76,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final productAsync = ref.watch(productDetailProvider(widget.productId));
+    final reviewsAsync = ref.watch(productReviewsProvider(widget.productId));
     final theme = Theme.of(context);
     final isLight = theme.brightness == Brightness.light;
 
@@ -128,8 +132,30 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
         ],
       ),
       body: productAsync.when(
-        loading: () => Center(
-          child: ZannyLoadingIndicator(size: 32, color: theme.colorScheme.primary),
+        loading: () => const SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ShimmerBox(width: double.infinity, height: 380, borderRadius: 24),
+              Padding(
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ShimmerBox(width: 80, height: 12, borderRadius: 4),
+                    SizedBox(height: 8),
+                    ShimmerBox(width: 200, height: 24, borderRadius: 6),
+                    SizedBox(height: 24),
+                    ShimmerBox(width: double.infinity, height: 40, borderRadius: 8),
+                    SizedBox(height: 24),
+                    ShimmerBox(width: 100, height: 16, borderRadius: 4),
+                    SizedBox(height: 12),
+                    ShimmerBox(width: double.infinity, height: 100, borderRadius: 12),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         error: (err, stack) => Center(
           child: Text(
@@ -190,11 +216,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                     return CachedNetworkImage(
                                       imageUrl: product.images[index],
                                       fit: BoxFit.contain,
-                                      placeholder: (context, url) => Center(
-                                        child: ZannyLoadingIndicator(
-                                          size: 24,
-                                          color: theme.colorScheme.secondary,
-                                        ),
+                                      placeholder: (context, url) => const ShimmerBox(
+                                        width: double.infinity,
+                                        height: double.infinity,
                                       ),
                                       errorWidget: (context, url, error) => Icon(
                                         Icons.image_outlined,
@@ -316,11 +340,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                 child: CachedNetworkImage(
                                   imageUrl: product.images[index],
                                   fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
-                                    color: theme.colorScheme.surface,
-                                    child: const Center(
-                                      child: ZannyLoadingIndicator(size: 16),
-                                    ),
+                                  placeholder: (context, url) => const ShimmerBox(
+                                    width: double.infinity,
+                                    height: double.infinity,
                                   ),
                                   errorWidget: (context, url, error) => const Icon(Icons.image_outlined, size: 20),
                                 ),
@@ -389,6 +411,65 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             ],
                           ),
                         ],
+                      ),
+
+                      reviewsAsync.when(
+                        data: (summary) {
+                          if (summary.total == 0) return const SizedBox.shrink();
+                          return InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ProductReviewsScreen(
+                                    productId: product.id,
+                                    productName: product.name,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 12.0),
+                              child: Row(
+                                children: [
+                                  Row(
+                                    children: List.generate(5, (starIdx) {
+                                      final fill = summary.average - starIdx;
+                                      IconData icon = Icons.star_border_rounded;
+                                      if (fill >= 1) {
+                                        icon = Icons.star_rounded;
+                                      } else if (fill >= 0.5) {
+                                        icon = Icons.star_half_rounded;
+                                      }
+                                      return Icon(
+                                        icon,
+                                        color: AppColors.accentGold,
+                                        size: 16,
+                                      );
+                                    }),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${summary.average.toStringAsFixed(1)}  (${summary.total} reviews)',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: theme.colorScheme.secondary,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.arrow_forward_ios_rounded,
+                                    size: 10,
+                                    color: theme.colorScheme.secondary,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                        loading: () => const SizedBox.shrink(),
+                        error: (_, __) => const SizedBox.shrink(),
                       ),
 
                       const SizedBox(height: 24),
@@ -704,6 +785,112 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         ),
                       ),
 
+                      const SizedBox(height: 32),
+                      Divider(color: theme.colorScheme.outline),
+                      const SizedBox(height: 20),
+
+                      // Ratings & Reviews summary row
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final reviewsAsync = ref.watch(productReviewsProvider(product.id));
+                          return reviewsAsync.when(
+                            loading: () => const SizedBox(),
+                            error: (err, stack) => const SizedBox(),
+                            data: (summary) {
+                              return InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProductReviewsScreen(
+                                        productId: product.id,
+                                        productName: product.name,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'RATINGS & REVIEWS',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 1.5,
+                                              color: theme.colorScheme.secondary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          if (summary.total == 0)
+                                            Text(
+                                              'No reviews yet',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                color: theme.colorScheme.secondary.withValues(alpha: 0.8),
+                                              ),
+                                            )
+                                          else
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  summary.average.toStringAsFixed(1),
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: theme.colorScheme.primary,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Row(
+                                                  children: List.generate(5, (starIndex) {
+                                                    final fill = summary.average - starIndex;
+                                                    IconData icon = Icons.star_border_rounded;
+                                                    if (fill >= 1) {
+                                                      icon = Icons.star_rounded;
+                                                    } else if (fill >= 0.5) {
+                                                      icon = Icons.star_half_rounded;
+                                                    }
+                                                    return Icon(
+                                                      icon,
+                                                      color: AppColors.accentGold,
+                                                      size: 14,
+                                                    );
+                                                  }),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  '(${summary.total} reviews)',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 12,
+                                                    color: theme.colorScheme.secondary,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                      Icon(
+                                        Icons.arrow_forward_ios_rounded,
+                                        size: 16,
+                                        color: theme.colorScheme.secondary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+
                       // "You May Also Like" Related Products
                       const SizedBox(height: 32),
                       Divider(color: theme.colorScheme.outline),
@@ -721,10 +908,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                       Consumer(builder: (context, ref, _) {
                         final relatedAsync = ref.watch(recommendedProductsProvider((product.id, product.category)));
                         return relatedAsync.when(
-                          loading: () => SizedBox(
-                            height: 150,
-                            child: Center(child: ZannyLoadingIndicator(size: 24, color: theme.colorScheme.primary)),
-                          ),
+                          loading: () => const HorizontalProductShimmer(),
                           error: (err, stack) => const SizedBox(),
                           data: (list) {
                             if (list.isEmpty) return const SizedBox();
@@ -763,11 +947,9 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                                           child: CachedNetworkImage(
                                                             imageUrl: item.images.first,
                                                             fit: BoxFit.contain,
-                                                            placeholder: (context, url) => Center(
-                                                              child: ZannyLoadingIndicator(
-                                                                size: 16,
-                                                                color: theme.colorScheme.secondary,
-                                                              ),
+                                                            placeholder: (context, url) => const ShimmerBox(
+                                                              width: double.infinity,
+                                                              height: double.infinity,
                                                             ),
                                                             errorWidget: (context, url, error) => Icon(
                                                               Icons.image_outlined,

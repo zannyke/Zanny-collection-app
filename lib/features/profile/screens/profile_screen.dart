@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/update_service.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 
 
 class ProfileScreen extends ConsumerWidget {
@@ -300,13 +301,7 @@ class _UpdateHistoryCardState extends State<_UpdateHistoryCard> {
               _checking
                   ? const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: SizedBox(
-                        width: 16, height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.accentGold),
-                        ),
-                      ),
+                      child: ShimmerPlaceholder(width: 16, height: 16, borderRadius: 8),
                     )
                   : TextButton.icon(
                       onPressed: () async {

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/custom_feedback.dart';
+import '../../../core/services/notification_service.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -39,7 +40,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
 
     // Navigate away on successful signup
     ref.listen(authProvider, (previous, next) {
-      if (next.isSignedIn) {
+      if (next.isSignedIn && !(previous?.isSignedIn ?? false)) {
+        NotificationService.showLocalNotification(
+          101,
+          'Welcome to Zanny Collection! ✨',
+          'Explore premium streetwear and style tailored for you.',
+        );
         context.pop();
       }
     });

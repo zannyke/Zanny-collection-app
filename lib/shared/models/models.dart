@@ -15,6 +15,8 @@ class Product {
   final bool isNew;
   final bool isSale;
   final int stock;
+  final double avgRating;
+  final int reviewCount;
 
   const Product({
     required this.id,
@@ -30,6 +32,8 @@ class Product {
     this.isNew = false,
     this.isSale = false,
     this.stock = 10,
+    this.avgRating = 0.0,
+    this.reviewCount = 0,
   });
 
   bool get isOnSale => originalPrice != null && originalPrice! > price;
@@ -39,21 +43,29 @@ class Product {
 
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? '',
       subtitle: json['subtitle'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      price: (json['price'] as num).toDouble(),
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
       originalPrice: json['original_price'] != null
-          ? (json['original_price'] as num).toDouble()
+          ? (json['original_price'] as num?)?.toDouble()
           : null,
-      images: List<String>.from(json['images'] as List? ?? []),
-      colors: List<String>.from(json['colors'] as List? ?? []),
-      sizes: List<String>.from(json['sizes'] as List? ?? []),
+      images: json['images'] is List
+          ? List<String>.from(json['images'] as List)
+          : [],
+      colors: json['colors'] is List
+          ? List<String>.from(json['colors'] as List)
+          : [],
+      sizes: json['sizes'] is List
+          ? List<String>.from(json['sizes'] as List)
+          : [],
       category: (json['category'] as String?) ?? (json['category_slug'] as String?) ?? '',
-      isNew: json['is_new'] as bool? ?? false,
-      isSale: json['is_sale'] as bool? ?? false,
-      stock: json['stock'] as int? ?? 10,
+      isNew: json['is_new'] == true || json['is_new'] == 1,
+      isSale: json['is_sale'] == true || json['is_sale'] == 1,
+      stock: (json['stock'] as num?)?.toInt() ?? 10,
+      avgRating: (json['avg_rating'] as num?)?.toDouble() ?? 0.0,
+      reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -72,6 +84,8 @@ class Product {
       'is_new': isNew,
       'is_sale': isSale,
       'stock': stock,
+      'avg_rating': avgRating,
+      'review_count': reviewCount,
     };
   }
 
@@ -562,6 +576,8 @@ class Order {
   final String deliveryAddress;
   final String recipientName;
   final String recipientPhone;
+  final String trackingNumber;
+  final int reviewPromptDismissed;
 
   const Order({
     required this.id,
@@ -572,6 +588,8 @@ class Order {
     required this.deliveryAddress,
     required this.recipientName,
     required this.recipientPhone,
+    this.trackingNumber = '',
+    this.reviewPromptDismissed = 0,
   });
 
   factory Order.fromJson(Map<String, dynamic> json) {
@@ -592,6 +610,8 @@ class Order {
       deliveryAddress: json['delivery_address'] as String? ?? '',
       recipientName: json['recipient_name'] as String? ?? '',
       recipientPhone: json['recipient_phone'] as String? ?? '',
+      trackingNumber: json['tracking_number'] as String? ?? '',
+      reviewPromptDismissed: json['review_prompt_dismissed'] as int? ?? 0,
     );
   }
 
@@ -613,6 +633,8 @@ class Order {
       'delivery_address': deliveryAddress,
       'recipient_name': recipientName,
       'recipient_phone': recipientPhone,
+      'tracking_number': trackingNumber,
+      'review_prompt_dismissed': reviewPromptDismissed,
     };
   }
 }

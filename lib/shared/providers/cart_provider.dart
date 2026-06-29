@@ -30,7 +30,8 @@ class CartNotifier extends Notifier<List<CartItem>> {
       } else {
         // User logged out
         _stopPolling();
-        // Do not clear the cart on logout to allow guest session cart persistence
+        state = [];
+        _saveToCache();
       }
     });
 

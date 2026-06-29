@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui' as ui;
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/addresses_provider.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/providers/cart_provider.dart';
+import '../../../shared/providers/product_provider.dart';
 import '../../../shared/providers/orders_provider.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/custom_feedback.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key});
@@ -38,6 +41,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       _nameController.text = user.userMetadata['full_name'] as String? ?? '';
       _phoneController.text = user.userMetadata['phone'] as String? ?? '';
     }
+    // Proactively refresh products in background to keep stock information live
+    Future.microtask(() {
+      ref.read(productsStateProvider.notifier).refresh();
+    });
   }
 
   @override
@@ -58,6 +65,21 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (cartItems.isEmpty) {
       ZannyFeedback.showError(context, 'Your cart is empty');
       return;
+    }
+
+    // Double check live stock again right before placing order
+    final latestProducts = ref.read(productsStateProvider);
+    for (final item in cartItems) {
+      final latest = latestProducts.where((p) => p.id == item.product.id).firstOrNull;
+      final stock = latest?.stock ?? item.product.stock;
+      if (stock <= 0) {
+        ZannyFeedback.showError(context, '${item.product.name} is out of stock. Please remove it from your cart.');
+        return;
+      }
+      if (stock < item.quantity) {
+        ZannyFeedback.showError(context, 'Only $stock items of ${item.product.name} are left in stock. Please adjust your quantity.');
+        return;
+      }
     }
 
     final defaultAddress = ref.read(defaultAddressProvider);
@@ -93,6 +115,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         deliveryAddress: '${address.streetAddress}, ${address.city}',
         recipientName: address.recipientName,
         recipientPhone: address.phone,
+        paymentMethod: _paymentMethod,
       );
       
       if (mounted) {
@@ -391,10 +414,37 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ),
           if (_isPlacingOrder)
             Positioned.fill(
-              child: Container(
-                color: Colors.black54,
-                child: const Center(
-                  child: CircularProgressIndicator(color: AppColors.accentGold),
+              child: ClipRRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border, width: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const ShimmerPlaceholder(width: 24, height: 24, borderRadius: 12),
+                            const SizedBox(width: 16),
+                            Text(
+                              'Placing your order...',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

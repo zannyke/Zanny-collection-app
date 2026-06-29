@@ -1,9 +1,11 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -243,10 +245,37 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           ),
           if (_isLoading)
             Positioned.fill(
-              child: Container(
-                color: Colors.black26,
-                child: Center(
-                  child: CircularProgressIndicator(color: theme.colorScheme.primary),
+              child: ClipRRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: theme.colorScheme.outline, width: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const ShimmerPlaceholder(width: 24, height: 24, borderRadius: 12),
+                            const SizedBox(width: 16),
+                            Text(
+                              'Saving changes...',
+                              style: GoogleFonts.inter(
+                                color: theme.colorScheme.primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

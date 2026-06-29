@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../providers/wishlist_provider.dart';
 import '../providers/auth_provider.dart';
 import 'animations.dart';
+import 'shimmer_widgets.dart';
 
 class ProductCard extends ConsumerWidget {
   final Product product;
@@ -55,14 +56,9 @@ class ProductCard extends ConsumerWidget {
                             ? CachedNetworkImage(
                                 imageUrl: product.images.first,
                                 fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  color: theme.colorScheme.surface,
-                                  child: Center(
-                                    child: ZannyLoadingIndicator(
-                                      size: 20,
-                                      color: theme.colorScheme.secondary,
-                                    ),
-                                  ),
+                                placeholder: (context, url) => const ShimmerBox(
+                                  width: double.infinity,
+                                  height: double.infinity,
                                 ),
                                 errorWidget: (context, url, error) => Center(
                                   child: Icon(Icons.image_outlined,
@@ -171,6 +167,32 @@ class ProductCard extends ConsumerWidget {
                           ],
                         ],
                       ),
+                      // Star rating row
+                      if (product.reviewCount > 0) ...[
+                        const SizedBox(height: 5),
+                        Row(
+                          children: [
+                            ...List.generate(5, (i) {
+                              final filled = i < product.avgRating.floor();
+                              final half = !filled && i < product.avgRating;
+                              return Icon(
+                                filled ? Icons.star : (half ? Icons.star_half : Icons.star_border),
+                                size: 11,
+                                color: filled || half ? const Color(0xFFFFC107) : theme.colorScheme.outline,
+                              );
+                            }),
+                            const SizedBox(width: 4),
+                            Text(
+                              '(${product.reviewCount})',
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                color: theme.colorScheme.secondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

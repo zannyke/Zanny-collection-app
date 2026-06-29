@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../shared/providers/auth_provider.dart';
 
 import '../../../shared/widgets/shimmer_widgets.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 
 class FashionScreen extends ConsumerStatefulWidget {
   const FashionScreen({super.key});
@@ -462,11 +463,10 @@ class _StylePostCardState extends ConsumerState<_StylePostCard> {
                       return CachedNetworkImage(
                         imageUrl: widget.style.images[imgIndex],
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.5),
-                          child: const Center(
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
+                        placeholder: (context, url) => const ShimmerPlaceholder(
+                          borderRadius: 0,
+                          width: double.infinity,
+                          height: double.infinity,
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: theme.colorScheme.outline,

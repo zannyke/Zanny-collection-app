@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/orders_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/feedback_dialog.dart';
 
 class OrdersScreen extends ConsumerWidget {
   const OrdersScreen({super.key});
@@ -311,72 +313,34 @@ class _OrderCardState extends State<_OrderCard> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ...order.items.map((item) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 60,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(8),
-                                  color: isLight ? const Color(0xFFF3F4F6) : const Color(0xFF1F1F1F),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: item.product.images.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: item.product.images.first,
-                                          fit: BoxFit.cover,
-                                        )
-                                      : const Icon(Icons.image_outlined, size: 16),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item.product.name,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: theme.colorScheme.onSurface,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Size: ${item.selectedSize}  |  Color: ${item.selectedColor}',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        color: theme.colorScheme.secondary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      'Qty: ${item.quantity}  x  KES ${item.product.price.toStringAsFixed(0)}',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        color: theme.colorScheme.secondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                'KES ${item.subtotal.toStringAsFixed(0)}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                        )),
+                    if (order.status == 'delivered')
+                      Consumer(builder: (context, ref, _) {
+                        final reviewedAsync = ref.watch(reviewedProductIdsProvider(order.id));
+                        final reviewedIds = reviewedAsync.valueOrNull ?? {};
+                        return Column(
+                          children: order.items.map((item) => _buildOrderItem(
+                            context,
+                            item,
+                            isLight,
+                            isRated: reviewedIds.contains(item.product.id),
+                            isDelivered: true,
+                            onRateTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => FeedbackDialog(orderId: order.id, preselectedProductId: item.product.id),
+                              );
+                            },
+                          )).toList(),
+                        );
+                      })
+                    else
+                      ...order.items.map((item) => _buildOrderItem(
+                        context,
+                        item,
+                        isLight,
+                        isRated: false,
+                        isDelivered: false,
+                      )),
                     const SizedBox(height: 16),
                     const Divider(height: 1, thickness: 0.5),
                     const SizedBox(height: 12),
@@ -423,32 +387,30 @@ class _OrderCardState extends State<_OrderCard> {
 
   Widget _buildTrackingStepper(BuildContext context, Order order) {
     final theme = Theme.of(context);
-    final steps = ['Placed', 'Confirmed', 'Shipped', 'Delivering', 'Delivered'];
+    
+    // Milestones definitions
+    final milestones = [
+      {'title': 'Order Placed', 'desc': 'Order successfully placed in our system'},
+      {'title': 'Order Confirmed', 'desc': 'Seller has confirmed and reserved stock'},
+      {'title': 'Shipping Process', 'desc': 'Package is packed and handed to courier'},
+      {'title': 'Out for Delivery', 'desc': 'Courier agent is delivering to your address'},
+      {'title': 'Delivered', 'desc': 'Successfully received and confirmed'},
+    ];
     
     int activeIndex = 0;
     switch (order.status) {
-      case 'pending':
-        activeIndex = 0;
-        break;
-      case 'confirmed':
-        activeIndex = 1;
-        break;
-      case 'shipped':
-        activeIndex = 2;
-        break;
-      case 'delivering':
-        activeIndex = 3;
-        break;
-      case 'delivered':
-        activeIndex = 4;
-        break;
+      case 'pending': activeIndex = 0; break;
+      case 'confirmed': activeIndex = 1; break;
+      case 'shipped': activeIndex = 2; break;
+      case 'delivering': activeIndex = 3; break;
+      case 'delivered': activeIndex = 4; break;
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'ORDER STATUS TRACKING',
+          'DELIVERY TRACKING',
           style: GoogleFonts.inter(
             fontSize: 9,
             fontWeight: FontWeight.w800,
@@ -457,70 +419,313 @@ class _OrderCardState extends State<_OrderCard> {
           ),
         ),
         const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(steps.length, (index) {
-            final isActive = index <= activeIndex;
-            final isCurrent = index == activeIndex;
-            return Expanded(
-              child: Column(
-                children: [
-                  Row(
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F0F12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          ),
+          child: Column(
+            children: [
+              ...List.generate(milestones.length, (index) {
+                final isCompleted = index <= activeIndex;
+                final isLast = index == milestones.length - 1;
+                final title = milestones[index]['title']!;
+                final desc = milestones[index]['desc']!;
+
+                return IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Left line
-                      Expanded(
-                        child: Container(
-                          height: 2,
-                          color: index == 0
-                              ? Colors.transparent
-                              : (isActive ? AppColors.accentGold : theme.colorScheme.outline),
-                        ),
-                      ),
-                      // Circle
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isActive
-                              ? (isCurrent ? AppColors.accentGold : AppColors.accentGold.withValues(alpha: 0.2))
-                              : theme.colorScheme.surface,
-                          border: Border.all(
-                            color: isActive ? AppColors.accentGold : theme.colorScheme.outline,
-                            width: isCurrent ? 4 : 2,
+                      // Dot & Line Column
+                      Column(
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isCompleted ? const Color(0xFF2196F3) : Colors.transparent,
+                              border: Border.all(
+                                color: isCompleted ? const Color(0xFF2196F3) : Colors.white24,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: isCompleted
+                                ? const Icon(Icons.check, color: Colors.white, size: 12)
+                                : null,
                           ),
-                        ),
+                          if (!isLast)
+                            Expanded(
+                              child: Container(
+                                width: 1.5,
+                                color: isCompleted && (index < activeIndex)
+                                    ? const Color(0xFF2196F3)
+                                    : Colors.white12,
+                              ),
+                            ),
+                        ],
                       ),
-                      // Right line
+                      const SizedBox(width: 16),
+                      // Content Column
                       Expanded(
-                        child: Container(
-                          height: 2,
-                          color: index == steps.length - 1
-                              ? Colors.transparent
-                              : (index < activeIndex ? AppColors.accentGold : theme.colorScheme.outline),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: isCompleted ? FontWeight.w700 : FontWeight.w500,
+                                  color: isCompleted ? Colors.white : Colors.white38,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                desc,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: isCompleted ? Colors.white54 : Colors.white24,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    steps[index],
-                    style: GoogleFonts.inter(
-                      fontSize: 8,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                      color: isActive ? theme.colorScheme.onSurface : theme.colorScheme.secondary,
+                );
+              }),
+              if (order.status == 'delivered') ...[
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => FeedbackDialog(orderId: order.id),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0x1A1CB86E),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0x331CB86E), width: 1),
                     ),
-                    textAlign: TextAlign.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.rate_review_outlined, color: Color(0xFF1CB86E), size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Rate this delivery',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF1CB86E),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            );
-          }),
+                ),
+              ],
+            ],
+          ),
         ),
         const SizedBox(height: 24),
+        if (order.trackingNumber.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1), width: 0.5),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.local_shipping_outlined, color: theme.colorScheme.primary, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TRACKING NUMBER',
+                        style: GoogleFonts.inter(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                          color: theme.colorScheme.secondary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        order.trackingNumber,
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    final isUrl = order.trackingNumber.startsWith('http://') || order.trackingNumber.startsWith('https://');
+                    final Uri uri = isUrl ? Uri.parse(order.trackingNumber) : Uri.parse('https://www.google.com/search?q=${Uri.encodeComponent(order.trackingNumber)}');
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_new_rounded, size: 14),
+                  label: Text(
+                    'TRACK',
+                    style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         const Divider(height: 1, thickness: 0.5),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  Widget _buildOrderItem(
+    BuildContext context,
+    CartItem item,
+    bool isLight, {
+    required bool isRated,
+    required bool isDelivered,
+    VoidCallback? onRateTap,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 50,
+            height: 60,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isLight ? const Color(0xFFF3F4F6) : const Color(0xFF1F1F1F),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: item.product.images.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: item.product.images.first,
+                      fit: BoxFit.cover,
+                    )
+                  : const Icon(Icons.image_outlined, size: 16),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.product.name,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Size: ${item.selectedSize}  |  Color: ${item.selectedColor}',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Qty: ${item.quantity}  x  KES ${item.product.price.toStringAsFixed(0)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: theme.colorScheme.secondary,
+                  ),
+                ),
+                if (isDelivered) ...[
+                  const SizedBox(height: 6),
+                  if (isRated)
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, color: AppColors.accentGold, size: 13),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Rated',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.accentGold,
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    GestureDetector(
+                      onTap: onRateTap,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star_border_rounded, size: 11, color: theme.colorScheme.primary),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Rate this product',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ),
+          ),
+          Text(
+            'KES ${item.subtotal.toStringAsFixed(0)}',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onSurface,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

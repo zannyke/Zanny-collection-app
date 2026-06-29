@@ -135,29 +135,10 @@ class OrdersNotifier extends Notifier<List<Order>> {
     required String deliveryAddress,
     required String recipientName,
     required String recipientPhone,
+    required String paymentMethod,
   }) async {
-    final id = 'ZC_ORD_${DateTime.now().millisecondsSinceEpoch}';
-    final newOrder = Order(
-      id: id,
-      items: items,
-      totalAmount: totalAmount,
-      status: 'pending',
-      createdAt: DateTime.now(),
-      deliveryAddress: deliveryAddress,
-      recipientName: recipientName,
-      recipientPhone: recipientPhone,
-    );
-
-    state = [newOrder, ...state];
-    final user = ref.read(currentUserProvider);
-    if (user != null) {
-      await _saveLocal(user.id, state);
-    }
-    ref.read(cartProvider.notifier).clear();
-
     try {
-      await _api.post('/api/orders', data: {
-        'id': id,
+      final resp = await _api.post('/api/orders', data: {
         'items': items.map((i) => {
           'product_id': i.product.id,
           'product_name': i.product.name,
@@ -173,11 +154,38 @@ class OrdersNotifier extends Notifier<List<Order>> {
         'delivery_address': deliveryAddress,
         'recipient_name': recipientName,
         'recipient_phone': recipientPhone,
+        'payment_method': paymentMethod,
       });
-    } on DioException catch (_) {
-    }
 
-    return newOrder;
+      final serverId = resp.data['id'] as String? ?? 'ORD-${DateTime.now().millisecondsSinceEpoch}';
+
+      final newOrder = Order(
+        id: serverId,
+        items: items,
+        totalAmount: totalAmount,
+        status: 'pending',
+        createdAt: DateTime.now(),
+        deliveryAddress: deliveryAddress,
+        recipientName: recipientName,
+        recipientPhone: recipientPhone,
+      );
+
+      state = [newOrder, ...state];
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await _saveLocal(user.id, state);
+      }
+      ref.read(cartProvider.notifier).clear();
+
+      return newOrder;
+    } on DioException catch (e) {
+      final errorMsg = e.response?.data is Map 
+          ? (e.response?.data['error'] ?? 'Failed to place order')
+          : (e.message ?? 'Failed to place order');
+      throw Exception(errorMsg);
+    } catch (e) {
+      throw Exception(e.toString());
+    }
   }
 
   Future<void> updateOrderStatus(String orderId, String status) async {
@@ -237,8 +245,67 @@ class OrdersNotifier extends Notifier<List<Order>> {
       deliveryAddress: json['delivery_address'] as String? ?? '',
       recipientName: json['recipient_name'] as String? ?? '',
       recipientPhone: json['recipient_phone'] as String? ?? '',
+      trackingNumber: json['tracking_number'] as String? ?? '',
+      reviewPromptDismissed: json['review_prompt_dismissed'] as int? ?? 0,
     );
   }
+
+  Future<void> dismissReviewPrompt(String orderId) async {
+    try {
+      await _api.post('/api/orders/$orderId/dismiss-review');
+      state = state.map((o) => o.id == orderId
+        ? Order(
+            id: o.id, items: o.items, totalAmount: o.totalAmount,
+            status: o.status, createdAt: o.createdAt,
+            deliveryAddress: o.deliveryAddress,
+            recipientName: o.recipientName,
+            recipientPhone: o.recipientPhone,
+            trackingNumber: o.trackingNumber,
+            reviewPromptDismissed: 1,
+          )
+        : o).toList();
+      final user = ref.read(currentUserProvider);
+      if (user != null) {
+        await _saveLocal(user.id, state);
+      }
+    } catch (_) {}
+  }
+
+  Future<bool> submitFeedback({
+    required String orderId,
+    required int rating,
+    required String comment,
+    String? productId,
+  }) async {
+    try {
+      final resp = await _api.post('/api/feedback', data: {
+        'order_id': orderId,
+        'rating': rating,
+        'comment': comment,
+        if (productId != null) 'product_id': productId,
+      });
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        state = state.map((o) => o.id == orderId
+          ? Order(
+              id: o.id, items: o.items, totalAmount: o.totalAmount,
+              status: o.status, createdAt: o.createdAt,
+              deliveryAddress: o.deliveryAddress,
+              recipientName: o.recipientName,
+              recipientPhone: o.recipientPhone,
+              trackingNumber: o.trackingNumber,
+              reviewPromptDismissed: 1,
+            )
+          : o).toList();
+        final user = ref.read(currentUserProvider);
+        if (user != null) {
+          await _saveLocal(user.id, state);
+        }
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
 }
 
 // ── Admin Orders Notifier ────────────────────────────────────────────────────
@@ -348,6 +415,8 @@ class AdminOrdersNotifier extends Notifier<List<Order>> {
       deliveryAddress: json['delivery_address'] as String? ?? '',
       recipientName: json['recipient_name'] as String? ?? '',
       recipientPhone: json['recipient_phone'] as String? ?? '',
+      trackingNumber: json['tracking_number'] as String? ?? '',
+      reviewPromptDismissed: json['review_prompt_dismissed'] as int? ?? 0,
     );
   }
 }
@@ -357,4 +426,17 @@ class AdminOrdersNotifier extends Notifier<List<Order>> {
 final ordersProvider = NotifierProvider<OrdersNotifier, List<Order>>(OrdersNotifier.new);
 
 final adminOrdersProvider = NotifierProvider<AdminOrdersNotifier, List<Order>>(AdminOrdersNotifier.new);
+
+/// Fetches the set of reviewed product IDs for a given order.
+/// Used to show per-item "Rated ✓" status in the orders history screen.
+final reviewedProductIdsProvider = FutureProvider.family<Set<String>, String>((ref, orderId) async {
+  try {
+    final api = ApiClient.instance;
+    final resp = await api.get('/api/orders/$orderId/reviewed-products');
+    final ids = (resp.data['reviewed_product_ids'] as List? ?? []).cast<String>();
+    return ids.toSet();
+  } catch (_) {
+    return {};
+  }
+});
 

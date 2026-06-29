@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:ui' as ui;
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../repositories/admin_repository.dart';
 import '../../../shared/providers/product_provider.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 
 class AdminAddProductScreen extends ConsumerStatefulWidget {
   final Product? product;
@@ -149,11 +151,15 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
 
   Future<void> _submitForm() async {
     final theme = Theme.of(context);
+    // Capture context-dependent objects before any await gaps
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+
     if (!_formKey.currentState!.validate()) return;
     
     final totalImageCount = _existingImageUrls.length + _selectedImages.length;
     if (totalImageCount == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: const Text('Please select or keep at least one product image'),
           backgroundColor: theme.colorScheme.error,
@@ -163,7 +169,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
     }
 
     if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: const Text('Please choose a category'),
           backgroundColor: theme.colorScheme.error,
@@ -178,7 +184,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
         .toList();
 
     if (selectedSizesList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: const Text('Please select at least one size'),
           backgroundColor: theme.colorScheme.error,
@@ -195,7 +201,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
     selectedColorsList.addAll(_customColors);
 
     if (selectedColorsList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
           content: const Text('Please select or add at least one color'),
           backgroundColor: theme.colorScheme.error,
@@ -235,7 +241,11 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
       );
 
       if (widget.product != null) {
-        await ref.read(productsStateProvider.notifier).updateProduct(product);
+        await ref.read(productsStateProvider.notifier).updateProduct(
+          product,
+          sendPush: _sendPushNotification,
+          pushBody: _pushBodyController.text.trim().isNotEmpty ? _pushBodyController.text.trim() : null,
+        );
       } else {
         await ref.read(productsStateProvider.notifier).addProduct(
           product,
@@ -244,28 +254,26 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
         );
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.product != null ? 'Product updated successfully' : 'Product added successfully'),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        ref.invalidate(adminProductsProvider);
-        ref.invalidate(newArrivalsProvider);
-        ref.invalidate(categoryProductsProvider);
-        ref.invalidate(relatedProductsProvider);
-        context.pop();
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(widget.product != null ? 'Product updated successfully' : 'Product added successfully'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      // Refresh productsStateProvider — admin dashboard and shop both watch this
+      await ref.read(productsStateProvider.notifier).refresh();
+      // Also invalidate family providers so category/new-arrivals screens reload
+      ref.invalidate(categoryProductsProvider);
+      ref.invalidate(newArrivalsProvider);
+      ref.invalidate(relatedProductsProvider);
+      if (mounted) router.pop();
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to save product: $e'),
-            backgroundColor: theme.colorScheme.error,
-          ),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to save product: $e'),
+          backgroundColor: theme.colorScheme.error,
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -890,10 +898,37 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
           ),
           if (_isLoading)
             Positioned.fill(
-              child: Container(
-                color: Colors.black54,
-                child: Center(
-                  child: CircularProgressIndicator(color: theme.colorScheme.primary),
+              child: ClipRRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border, width: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const ShimmerPlaceholder(width: 24, height: 24, borderRadius: 12),
+                            const SizedBox(width: 16),
+                            Text(
+                              widget.product == null ? 'Adding product...' : 'Updating product...',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

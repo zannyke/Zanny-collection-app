@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../shared/providers/product_provider.dart';
 import '../../../shared/widgets/product_card.dart';
-import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
 
 class WorldOfZannyScreen extends ConsumerWidget {
   const WorldOfZannyScreen({super.key});
@@ -45,11 +45,9 @@ class WorldOfZannyScreen extends ConsumerWidget {
               child: CachedNetworkImage(
                 imageUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800',
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Center(
-                  child: ZannyLoadingIndicator(
-                    size: 28,
-                    color: theme.colorScheme.secondary,
-                  ),
+                placeholder: (context, url) => const ShimmerBox(
+                  width: double.infinity,
+                  height: double.infinity,
                 ),
                 errorWidget: (context, url, error) => Center(
                   child: Icon(Icons.image_outlined, color: theme.colorScheme.secondary, size: 48),
@@ -245,10 +243,7 @@ class _ZannyOriginalsSection extends ConsumerWidget {
           ],
         );
       },
-      loading: () => const SizedBox(
-        height: 150,
-        child: Center(child: ZannyLoadingIndicator(size: 24)),
-      ),
+      loading: () => const HorizontalProductShimmer(),
       error: (_, __) => const SizedBox.shrink(),
     );
   }

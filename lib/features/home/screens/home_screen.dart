@@ -11,9 +11,10 @@ import '../../../shared/widgets/product_card.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/shimmer_widgets.dart';
-
-
 import '../../../core/services/update_service.dart';
+import '../../../core/cloudflare/api_client.dart';
+import '../../../shared/providers/auth_provider.dart';
+import '../../../shared/widgets/feedback_dialog.dart';
 
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -29,7 +30,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       UpdateService.checkForUpdate(context: context);
+      _checkPendingFeedback();
     });
+  }
+
+  Future<void> _checkPendingFeedback() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    try {
+      final api = ApiClient.instance;
+      final resp = await api.get('/api/feedback/pending');
+      if (resp.statusCode == 200 && resp.data != null && resp.data['pending'] == true) {
+        final orderId = resp.data['order']['id'] as String;
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => FeedbackDialog(orderId: orderId),
+          );
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -329,11 +351,9 @@ class _CategoryCard extends ConsumerWidget {
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
                           fit: BoxFit.cover,
-                          placeholder: (context, url) => const Center(
-                            child: ZannyLoadingIndicator(
-                              size: 20,
-                              color: AppColors.textSecondary,
-                            ),
+                          placeholder: (context, url) => const ShimmerBox(
+                            width: double.infinity,
+                            height: double.infinity,
                           ),
                           errorWidget: (context, url, error) => const Center(
                             child: Icon(Icons.image_outlined,
@@ -557,11 +577,9 @@ class _StreetStylesSection extends ConsumerWidget {
                       CachedNetworkImage(
                         imageUrl: item.images.isNotEmpty ? item.images.first : '',
                         fit: BoxFit.cover,
-                        placeholder: (context, url) => Container(
-                          color: theme.colorScheme.surface,
-                          child: const Center(
-                            child: ZannyLoadingIndicator(size: 20),
-                          ),
+                        placeholder: (context, url) => const ShimmerBox(
+                          width: double.infinity,
+                          height: double.infinity,
                         ),
                         errorWidget: (context, url, error) => Container(
                           color: theme.colorScheme.surface,

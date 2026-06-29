@@ -36,6 +36,11 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- Firebase push notification icon silhouette config -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_notification" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.example.zanny_collection.fileprovider"

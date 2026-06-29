@@ -5,9 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/cart_provider.dart';
+import '../../../shared/providers/product_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/custom_feedback.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
 
 
 class CartScreen extends ConsumerWidget {
@@ -17,6 +19,11 @@ class CartScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final items = ref.watch(cartProvider);
     final total = ref.watch(cartTotalProvider);
+
+    // Refresh products list in background to ensure we have latest live stock levels
+    Future.microtask(() {
+      ref.read(productsStateProvider.notifier).refresh();
+    });
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -74,11 +81,9 @@ class _CartItemTile extends ConsumerWidget {
                 ? CachedNetworkImage(
                     imageUrl: item.product.images.first,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => Center(
-                      child: ZannyLoadingIndicator(
-                        size: 16,
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
+                    placeholder: (context, url) => const ShimmerBox(
+                      width: double.infinity,
+                      height: double.infinity,
                     ),
                     errorWidget: (context, url, error) => Center(
                       child: Icon(Icons.image_outlined,
@@ -111,6 +116,41 @@ class _CartItemTile extends ConsumerWidget {
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.secondary,
                   ),
+                ),
+                Consumer(
+                  builder: (context, ref, _) {
+                    final products = ref.watch(productsStateProvider);
+                    final latest = products.where((p) => p.id == item.product.id).firstOrNull;
+                    final stock = latest?.stock ?? item.product.stock;
+                    
+                    if (stock <= 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          'OUT OF STOCK',
+                          style: GoogleFonts.inter(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      );
+                    } else if (stock < item.quantity) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Text(
+                          'Only $stock left in stock',
+                          style: GoogleFonts.inter(
+                            color: Colors.orangeAccent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -199,6 +239,7 @@ class _OrderSummary extends ConsumerWidget {
     const shipping = 250.0;
     final theme = Theme.of(context);
     final user = ref.watch(currentUserProvider);
+    final items = ref.watch(cartProvider);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -238,6 +279,22 @@ class _OrderSummary extends ConsumerWidget {
                 context.push('/login');
                 return;
               }
+              
+              // Validate live stock before proceeding to checkout
+              final products = ref.read(productsStateProvider);
+              for (final item in items) {
+                final latest = products.where((p) => p.id == item.product.id).firstOrNull;
+                final stock = latest?.stock ?? item.product.stock;
+                if (stock <= 0) {
+                  ZannyFeedback.showError(context, '${item.product.name} is out of stock. Please remove it from your cart.');
+                  return;
+                }
+                if (stock < item.quantity) {
+                  ZannyFeedback.showError(context, 'Only $stock items of ${item.product.name} are left in stock. Please adjust your quantity.');
+                  return;
+                }
+              }
+              
               context.push('/checkout');
             },
             text: 'PROCEED TO CHECKOUT',

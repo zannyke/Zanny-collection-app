@@ -44,6 +44,7 @@ migrate.cfg
 **/android/app/generated_signing_key.pub
 **/android/app/generated_signing_key.pem
 **/android/app/src/main/assets/google-services.json
+**/android/app/google-services.json
 **/*.keystore
 **/*.jks
 

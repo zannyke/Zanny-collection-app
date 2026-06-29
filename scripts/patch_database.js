@@ -61,7 +61,11 @@ const statements = [
 
   // style likes & comments (Build 20 live data tracking)
   "CREATE TABLE IF NOT EXISTS style_likes (style_id TEXT NOT NULL, user_id TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')), PRIMARY KEY (style_id, user_id))",
-  "CREATE TABLE IF NOT EXISTS style_comments (id TEXT PRIMARY KEY, style_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))"
+  "CREATE TABLE IF NOT EXISTS style_comments (id TEXT PRIMARY KEY, style_id TEXT NOT NULL, user_id TEXT NOT NULL, username TEXT NOT NULL, comment TEXT NOT NULL, created_at TEXT DEFAULT (datetime('now')))",
+  "ALTER TABLE feedback ADD COLUMN product_id TEXT",
+  "ALTER TABLE feedback ADD COLUMN user_id TEXT",
+  "CREATE INDEX IF NOT EXISTS idx_feedback_product ON feedback(product_id)",
+  "CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id)"
 ];
 
 console.log("Starting remote self-healing D1 database patch...");

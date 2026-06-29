@@ -3,9 +3,9 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $workerUrl   = "https://zanny-collection-api.zannykenya254.workers.dev"
-$version     = "1.0.13"
-$build       = 25
-$changelog   = "Fix FCM token registration bug for cached user session on app startup."
+$version     = "1.0.15"
+$build       = 34
+$changelog   = "Migrate admin review prompts, welcome alerts, package tracking, and layout shimmer skeleton stencils."
 $adminSecret = "ZannyAdmin2024Secret"
 
 $latestApk = Get-ChildItem -Path "build/app/outputs/flutter-apk" -Filter "zanny_collection_v${version}_*.apk" | Sort-Object LastWriteTime | Select-Object -Last 1
@@ -56,7 +56,7 @@ Write-Host "`n==> Step 3: Publishing version.json (v$version build $build) ..." 
 $versionPayload = @{
     version   = $version
     build     = $build
-    apk_url   = "$workerUrl/api/images/$apkKey"
+    apk_url   = "https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev/$apkKey"
     changelog = $changelog
 } | ConvertTo-Json
 

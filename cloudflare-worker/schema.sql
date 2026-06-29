@@ -142,3 +142,22 @@ CREATE TABLE IF NOT EXISTS cart_items (
 
 CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items(user_id);
 
+-- ── Feedback ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS feedback (
+  id          TEXT PRIMARY KEY,
+  order_id    TEXT NOT NULL,
+  product_id  TEXT,
+  user_id     TEXT,
+  rating      INTEGER NOT NULL,
+  comment     TEXT DEFAULT '',
+  created_at  TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (order_id) REFERENCES orders(id),
+  FOREIGN KEY (product_id) REFERENCES products(id),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_order ON feedback(order_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_product ON feedback(product_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_user ON feedback(user_id);
+
+

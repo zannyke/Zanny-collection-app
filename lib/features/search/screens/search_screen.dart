@@ -8,6 +8,7 @@ import '../../../shared/models/models.dart';
 import '../../../shared/providers/product_provider.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/product_card.dart';
+import '../../../shared/widgets/shimmer_widgets.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -77,9 +78,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           else
             Expanded(
               child: searchAsync.when(
-                loading: () => const Center(
-                  child: ZannyLoadingIndicator(size: 32, color: AppColors.textPrimary),
-                ),
+                loading: () => const ProductGridShimmer(),
                 error: (err, stack) => Center(
                   child: Text(
                     'Error: $err',

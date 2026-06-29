@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,27 +17,19 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _checkController;
   late Animation<double> _scaleAnimation;
-  late Animation<double> _glowOpacityAnimation;
 
   @override
   void initState() {
     super.initState();
     _checkController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 800),
     );
 
     _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _checkController,
-        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
-      ),
-    );
-
-    _glowOpacityAnimation = Tween<double>(begin: 0.0, end: 0.18).animate(
-      CurvedAnimation(
-        parent: _checkController,
-        curve: const Interval(0.4, 1.0, curve: Curves.easeInOut),
+        curve: Curves.easeOutBack,
       ),
     );
 
@@ -54,10 +45,15 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isLight = !isDark;
     final order = widget.order;
+    final now = DateTime.now();
+    final formattedDate = "${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year.toString().substring(2)} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final scaffoldBg = isDark ? theme.scaffoldBackgroundColor : const Color(0xFFF0F7FF);
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: scaffoldBg,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -66,206 +62,137 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
             children: [
               const Spacer(flex: 2),
 
-              // Animated Glowing Checkmark
-              AnimatedBuilder(
-                animation: _checkController,
-                builder: (context, child) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Inner Glow
-                      Container(
-                        width: 140,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.accentGold.withValues(alpha: _glowOpacityAnimation.value),
-                              blurRadius: 40,
-                              spreadRadius: 10,
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Scale Check Circle
-                      ScaleTransition(
-                        scale: _scaleAnimation,
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.accentGold, width: 2),
-                            color: AppColors.background,
-                          ),
-                          child: const Icon(
-                            Icons.check_rounded,
-                            color: AppColors.accentGold,
-                            size: 44,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-
-              const SizedBox(height: 32),
-
-              // Headline
-              FadeInSlide(
-                delay: const Duration(milliseconds: 300),
-                child: Text(
-                  'ORDER PLACED',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 4,
-                    color: theme.colorScheme.primary,
+              // Checked Icon
+              ScaleTransition(
+                scale: _scaleAnimation,
+                child: Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0x1A1CB86E)
+                        : const Color(0xFFDBEAFE),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0x331CB86E)
+                          : const Color(0xFF93C5FD),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.check_rounded,
+                    color: isDark
+                        ? const Color(0xFF1CB86E)
+                        : const Color(0xFF1D4ED8),
+                    size: 38,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 28),
+
+              // Title
               FadeInSlide(
-                delay: const Duration(milliseconds: 400),
+                delay: const Duration(milliseconds: 200),
                 child: Text(
-                  'Thank you for your purchase. We are preparing your order.',
+                  'Your order has been\nsuccessfully submitted',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: theme.colorScheme.secondary,
-                    height: 1.5,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                    height: 1.3,
                   ),
                 ),
               ),
 
-              const Spacer(),
+              const SizedBox(height: 36),
 
-              // Glassmorphic Order Summary Info Card
+              // Order detail card matching checkout_success screenshot
+              FadeInSlide(
+                delay: const Duration(milliseconds: 400),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F0F12) : const Color(0xFFF0F7FF),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: isDark ? Colors.white.withValues(alpha: 0.06) : const Color(0xFFBFDBFE),
+                      width: 0.5,
+                    ),
+                    boxShadow: isDark
+                        ? []
+                        : [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                  ),
+                  child: Column(
+                    children: [
+                      _buildInfoRow(context, 'Order ID', order.id.replaceAll('ZC_ORD_', '')),
+                      _buildDivider(context),
+                      _buildInfoRow(context, 'Payment Method', order.totalAmount > 0 ? 'Cash on Delivery' : 'M-Pesa'),
+                      _buildDivider(context),
+                      _buildInfoRow(context, 'Date & Time', formattedDate),
+                      _buildDivider(context),
+                      _buildInfoRow(
+                        context,
+                        'Total',
+                        'KES ${order.totalAmount.toStringAsFixed(0)}',
+                        isTotal: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const Spacer(flex: 3),
+
+              // "Go to my account" action button matching screen
               FadeInSlide(
                 delay: const Duration(milliseconds: 600),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: theme.colorScheme.outline, width: 0.5),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'ORDER ID',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.colorScheme.secondary,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              Text(
-                                order.id,
-                                style: GoogleFonts.inter(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w800,
-                                  color: theme.colorScheme.onSurface,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Divider(height: 1, thickness: 0.5),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'TOTAL PAID',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: theme.colorScheme.secondary,
-                                  letterSpacing: 1.5,
-                                ),
-                              ),
-                              Text(
-                                'KES ${order.totalAmount.toStringAsFixed(0)}',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.accentGold,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Divider(height: 1, thickness: 0.5),
-                          const SizedBox(height: 12),
-                          Text(
-                            'DELIVERING TO',
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              color: theme.colorScheme.secondary,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${order.recipientName}  |  ${order.recipientPhone}',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            order.deliveryAddress,
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: theme.colorScheme.secondary,
-                            ),
-                          ),
-                        ],
-                      ),
+                child: ElevatedButton(
+                  onPressed: () {
+                    context.go('/profile');
+                    context.push('/orders');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? Colors.white : const Color(0xFF1D4ED8),
+                    foregroundColor: isDark ? Colors.black : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    minimumSize: const Size(double.infinity, 56),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Go to my account',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ),
 
-              const Spacer(flex: 2),
-
-              // Action Buttons
+              const SizedBox(height: 16),
+              
               FadeInSlide(
-                delay: const Duration(milliseconds: 800),
-                child: Column(
-                  children: [
-                    PremiumButton(
-                      text: 'Track Order',
-                      type: PremiumButtonType.primary,
-                      onPressed: () {
-                        context.go('/profile');
-                        context.push('/orders');
-                      },
+                delay: const Duration(milliseconds: 700),
+                child: TextButton(
+                  onPressed: () => context.go('/'),
+                  child: Text(
+                    'Continue Shopping',
+                    style: GoogleFonts.inter(
+                      color: isLight ? const Color(0xFF2563EB) : Colors.white54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
-                    const SizedBox(height: 12),
-                    PremiumButton(
-                      text: 'Continue Shopping',
-                      type: PremiumButtonType.secondary,
-                      onPressed: () {
-                        context.go('/');
-                      },
-                    ),
-                  ],
+                  ),
                 ),
               ),
               
@@ -274,6 +201,46 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildInfoRow(BuildContext context, String label, String value, {bool isTotal = false}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              color: isDark ? Colors.white38 : const Color(0xFF64748B),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              color: isTotal 
+                  ? (isDark ? AppColors.accentGold : const Color(0xFF1E3A8A)) 
+                  : theme.colorScheme.onSurface,
+              fontSize: isTotal ? 14 : 12,
+              fontWeight: isTotal ? FontWeight.w800 : FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Divider(
+      color: isDark ? Colors.white.withValues(alpha: 0.04) : const Color(0xFFBFDBFE),
+      height: 1,
+      thickness: 0.5,
     );
   }
 }

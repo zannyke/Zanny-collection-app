@@ -52,8 +52,8 @@ class BottomNavScaffold extends StatelessWidget {
               label: 'Shop',
             ),
             BottomNavigationBarItem(
-              icon: Icon(CupertinoIcons.sparkles, size: 22),
-              activeIcon: Icon(CupertinoIcons.sparkles, size: 22),
+              icon: Icon(Icons.checkroom_outlined, size: 22),
+              activeIcon: Icon(Icons.checkroom, size: 22),
               label: 'Fashion',
             ),
             BottomNavigationBarItem(

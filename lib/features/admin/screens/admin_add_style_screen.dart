@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:ui' as ui;
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/providers/street_styles_provider.dart';
 import '../repositories/admin_repository.dart';
+import '../../../shared/widgets/shimmer_placeholder.dart';
 
 class AdminAddStyleScreen extends ConsumerStatefulWidget {
   const AdminAddStyleScreen({super.key});
@@ -339,10 +341,37 @@ class _AdminAddStyleScreenState extends ConsumerState<AdminAddStyleScreen> {
           ),
           if (_isLoading)
             Positioned.fill(
-              child: Container(
-                color: Colors.black54,
-                child: Center(
-                  child: CircularProgressIndicator(color: theme.colorScheme.primary),
+              child: ClipRRect(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Container(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.border, width: 0.5),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const ShimmerPlaceholder(width: 24, height: 24, borderRadius: 12),
+                            const SizedBox(width: 16),
+                            Text(
+                              'Uploading style lookbook...',
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

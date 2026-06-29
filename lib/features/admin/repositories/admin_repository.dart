@@ -111,56 +111,32 @@ class AdminRepository {
 
   /// Upload an image to Cloudflare R2 via multipart and return its public URL.
   Future<String> uploadProductImage(File file) async {
-    try {
-      final fileExt = file.path.split('.').last;
-      final fileName = 'products/${DateTime.now().microsecondsSinceEpoch}.$fileExt';
+    final fileExt = file.path.split('.').last;
+    final fileName = 'products/${DateTime.now().microsecondsSinceEpoch}.$fileExt';
 
-      // Upload directly to R2 via Worker proxy endpoint
-      final formData = FormData.fromMap({
-        'file': await MultipartFile.fromFile(
-          file.path,
-          filename: fileName,
-        ),
-        'key': fileName,
-      });
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(
+        file.path,
+        filename: fileName,
+      ),
+      'key': fileName,
+    });
 
-      final resp = await _api.post('/api/upload', data: formData);
-      final key = resp.data['key'] as String? ?? fileName;
-      return '${CloudflareConfig.r2PublicUrl}/$key';
-    } catch (_) {
-      // Fallback placeholder from R2 public bucket
-      return '${CloudflareConfig.r2PublicUrl}/placeholder.jpg';
-    }
+    // Let DioException propagate — _submitForm has its own catch that shows the error
+    final resp = await _api.post('/api/upload', data: formData);
+    final key = resp.data['key'] as String? ?? fileName;
+    return '${CloudflareConfig.r2PublicUrl}/$key';
   }
 
   /// Toggle product active status (soft delete/hide).
   Future<void> toggleProductActiveStatus(String productId, bool isActive) async {
-    try {
-      await _api.put('/api/products/$productId', data: {'is_active': isActive});
-    } catch (_) {
-      final index = _mockAdminProducts.indexWhere((p) => p.id == productId);
-      if (index != -1) {
-        final p = _mockAdminProducts[index];
-        _mockAdminProducts[index] = Product(
-          id: p.id, name: p.name, subtitle: p.subtitle,
-          description: p.description, price: p.price,
-          originalPrice: p.originalPrice, images: p.images,
-          colors: p.colors, sizes: p.sizes, category: p.category,
-          isNew: p.isNew, isSale: p.isSale, stock: p.stock,
-        );
-      }
-    }
+    await _api.put('/api/products/$productId', data: {'is_active': isActive});
   }
 
   /// Delete product via Worker API.
   Future<void> deleteProduct(String productId) async {
-    try {
-      await _api.delete('/api/products/$productId');
-      _mockAdminProducts.removeWhere((p) => p.id == productId);
-    } catch (_) {
-      _mockAdminProducts.removeWhere((p) => p.id == productId);
-      await _saveMockProducts();
-    }
+    await _api.delete('/api/products/$productId');
+    _mockAdminProducts.removeWhere((p) => p.id == productId);
   }
 
   static final List<Product> _mockAdminProducts =
