@@ -17,6 +17,7 @@ class Product {
   final int stock;
   final double avgRating;
   final int reviewCount;
+  final bool isPreorder;
 
   const Product({
     required this.id,
@@ -34,6 +35,7 @@ class Product {
     this.stock = 10,
     this.avgRating = 0.0,
     this.reviewCount = 0,
+    this.isPreorder = false,
   });
 
   bool get isOnSale => originalPrice != null && originalPrice! > price;
@@ -66,6 +68,7 @@ class Product {
       stock: (json['stock'] as num?)?.toInt() ?? 10,
       avgRating: (json['avg_rating'] as num?)?.toDouble() ?? 0.0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
+      isPreorder: json['is_preorder'] == true || json['is_preorder'] == 1,
     );
   }
 
@@ -86,6 +89,7 @@ class Product {
       'stock': stock,
       'avg_rating': avgRating,
       'review_count': reviewCount,
+      'is_preorder': isPreorder,
     };
   }
 

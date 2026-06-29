@@ -194,13 +194,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 }
 
 // ── Hero Banner ────────────────────────────────────────────────────────────────
-class _HeroBanner extends StatelessWidget {
+class _HeroBanner extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bannerUrl = ref.watch(bannerImageProvider);
+    final screenHeight = MediaQuery.of(context).size.height;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Container(
-        height: 380,
+        height: screenHeight * 0.65,
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(24),
@@ -212,7 +214,7 @@ class _HeroBanner extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               CachedNetworkImage(
-                imageUrl: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1000',
+                imageUrl: bannerUrl,
                 fit: BoxFit.cover,
                 placeholder: (context, url) => Container(
                   color: AppColors.surfaceElevated,

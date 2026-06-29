@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS products (
   is_sale        INTEGER DEFAULT 0,
   is_active      INTEGER DEFAULT 1,
   is_deleted     INTEGER DEFAULT 0,
+  is_preorder    INTEGER DEFAULT 0,
   created_at     TEXT DEFAULT (datetime('now'))
 );
 

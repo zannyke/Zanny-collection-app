@@ -236,7 +236,28 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                         ),
                       ),
 
-                      if (product.isNew)
+                      if (product.isPreorder)
+                        Positioned(
+                          top: 16,
+                          left: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF8E24AA), // Deep Purple for Pre-Orders
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'PRE-ORDER',
+                              style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.5,
+                                  color: Colors.white),
+                            ),
+                          ),
+                        )
+                      else if (product.isNew)
                         Positioned(
                           top: 16,
                           left: 16,
@@ -688,7 +709,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           ),
                         ),
 
-                      if (product.stock <= 0)
+                      if (product.stock <= 0 && !product.isPreorder)
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -726,7 +747,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  _addedToCart ? 'ADDED ✓' : 'ADD TO CART',
+                                  _addedToCart ? 'ADDED ✓' : (product.isPreorder ? 'PRE-ORDER ITEM' : 'ADD TO CART'),
                                   style: GoogleFonts.inter(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,
@@ -749,7 +770,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  'BUY NOW',
+                                  product.isPreorder ? 'PRE-ORDER NOW' : 'BUY NOW',
                                   style: GoogleFonts.inter(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,

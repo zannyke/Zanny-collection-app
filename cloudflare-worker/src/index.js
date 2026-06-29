@@ -141,7 +141,10 @@ export default {
       } else if (path === '/api/upload' && method === 'POST') {
         response = await handleUpload(request, env);
 
-      // ── Health ──────────────────────────────────────────────────────────────
+      } else if (/^\/api\/settings\/[^/]+$/.test(path) && method === 'GET') {
+        response = await handleGetSetting(path.split('/')[3], env);
+      } else if (/^\/api\/settings\/[^/]+$/.test(path) && method === 'PUT') {
+        response = await handleUpdateSetting(path.split('/')[3], request, env);
       } else if (path === '/api/health') {
         response = json({ status: 'ok', ts: new Date().toISOString() });
       } else {
@@ -589,7 +592,8 @@ function parseProduct(row, env, origin = '') {
     stock: row.stock !== undefined ? row.stock : 10,
     is_active: row.is_deleted === 0 || row.is_active === 1,
     avg_rating: Math.round((row.avg_rating || 0) * 10) / 10,
-    review_count: row.review_count || 0
+    review_count: row.review_count || 0,
+    is_preorder: row.is_preorder === 1
   };
 }
 
@@ -656,14 +660,15 @@ async function handleCreateProduct(request, env, origin = '') {
   const badge = data.is_new ? 'NEW' : (data.is_sale ? 'SALE' : null);
 
   await env.DB.prepare(`
-    INSERT INTO products (id, name, subtitle, category, description, price, original_price, image_url, gallery_urls, colors, sizes, badge, is_new, is_sale, stock, is_deleted)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    INSERT INTO products (id, name, subtitle, category, description, price, original_price, image_url, gallery_urls, colors, sizes, badge, is_new, is_sale, stock, is_preorder, is_deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `).bind(
     id, data.name || '', data.subtitle || '', data.category || data.category_slug || '', data.description || '',
     data.price || 0, data.original_price || null, mainImage, galleryUrls,
     JSON.stringify(data.colors || []), JSON.stringify(data.sizes || []), badge,
     data.is_new ? 1 : 0, data.is_sale ? 1 : 0,
-    data.stock !== undefined ? data.stock : 10
+    data.stock !== undefined ? data.stock : 10,
+    data.is_preorder ? 1 : 0
   ).run();
 
   if (data.send_push === true) {
@@ -695,7 +700,7 @@ async function handleUpdateProduct(id, request, env, origin = '') {
 
   await env.DB.prepare(`
     UPDATE products SET name=?, subtitle=?, category=?, description=?, price=?, original_price=?,
-    image_url=?, gallery_urls=?, colors=?, sizes=?, badge=?, is_new=?, is_sale=?, stock=?, is_deleted=?
+    image_url=?, gallery_urls=?, colors=?, sizes=?, badge=?, is_new=?, is_sale=?, stock=?, is_preorder=?, is_deleted=?
     WHERE id=?
   `).bind(
     data.name || '', data.subtitle || '', data.category || data.category_slug || '', data.description || '',
@@ -703,6 +708,7 @@ async function handleUpdateProduct(id, request, env, origin = '') {
     JSON.stringify(data.colors || []), JSON.stringify(data.sizes || []), badge,
     data.is_new ? 1 : 0, data.is_sale ? 1 : 0,
     data.stock !== undefined ? data.stock : 10,
+    data.is_preorder ? 1 : 0,
     data.is_deleted === true || data.is_active === false ? 1 : 0,
     id
   ).run();
@@ -866,14 +872,16 @@ async function handleCreateOrder(request, env) {
 
   // 2. Live Stock Check
   const items = data.items || [];
+  const preOrderMap = new Map();
   for (const item of items) {
     const prodId = item.product_id || item.product?.id || '';
     if (!prodId) return json({ error: 'Invalid product details' }, 400);
-    const prod = await env.DB.prepare('SELECT name, stock FROM products WHERE id = ? AND is_deleted = 0').bind(prodId).first();
+    const prod = await env.DB.prepare('SELECT name, stock, is_preorder FROM products WHERE id = ? AND is_deleted = 0').bind(prodId).first();
     if (!prod) {
       return json({ error: `Product not found: ${item.product_name || prodId}` }, 400);
     }
-    if (prod.stock < item.quantity) {
+    preOrderMap.set(prodId, prod.is_preorder === 1);
+    if (prod.is_preorder !== 1 && prod.stock < item.quantity) {
       return json({ error: `Insufficient stock for item: ${prod.name}. Available: ${prod.stock}, requested: ${item.quantity}.` }, 400);
     }
   }
@@ -885,10 +893,18 @@ async function handleCreateOrder(request, env) {
   const statements = [];
   for (const item of items) {
     const prodId = item.product_id || item.product?.id || '';
-    statements.push(
-      env.DB.prepare('UPDATE products SET stock = stock - ?, sold = sold + ? WHERE id = ?')
-        .bind(item.quantity, item.quantity, prodId)
-    );
+    const isPre = preOrderMap.get(prodId) || false;
+    if (isPre) {
+      statements.push(
+        env.DB.prepare('UPDATE products SET sold = sold + ? WHERE id = ?')
+          .bind(item.quantity, prodId)
+      );
+    } else {
+      statements.push(
+        env.DB.prepare('UPDATE products SET stock = stock - ?, sold = sold + ? WHERE id = ?')
+          .bind(item.quantity, item.quantity, prodId)
+      );
+    }
   }
 
   // 5. Insert into DB (serialize Snapshots of items)
@@ -2022,4 +2038,23 @@ async function handleSendAdvertisement(request, env) {
   const result = await broadcastFcmNotification(env, title, body, route);
   return json({ success: true, count: result.count || 0 });
 }
+
+async function handleGetSetting(key, env) {
+  const row = await env.DB.prepare('SELECT value FROM app_settings WHERE key = ?').bind(key).first();
+  return json({ key, value: row ? row.value : null });
+}
+
+async function handleUpdateSetting(key, request, env) {
+  await requireAdmin(request, env);
+  const data = await request.json().catch(() => ({}));
+  const value = data.value;
+  if (value === undefined) {
+    return json({ error: 'Value is required' }, 400);
+  }
+  await env.DB.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)')
+    .bind(key, value)
+    .run();
+  return json({ success: true, key, value });
+}
+
 

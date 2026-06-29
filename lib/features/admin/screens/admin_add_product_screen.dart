@@ -55,6 +55,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
   String? _selectedCategory;
   bool _isNew = false;
   bool _isSale = false;
+  bool _isPreorder = false;
   bool _isLoading = false;
   bool _sendPushNotification = false;
 
@@ -93,6 +94,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
       _selectedCategory = p.category;
       _isNew = p.isNew;
       _isSale = p.isSale;
+      _isPreorder = p.isPreorder;
       
       for (final color in p.colors) {
         if (_colorsMap.containsKey(color)) {
@@ -238,6 +240,7 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
         stock: int.parse(_stockController.text.trim()),
         isNew: _isNew,
         isSale: _isSale,
+        isPreorder: _isPreorder,
       );
 
       if (widget.product != null) {
@@ -833,6 +836,19 @@ class _AdminAddProductScreenState extends ConsumerState<AdminAddProductScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  CheckboxListTile(
+                    title: Text('Mark as PRE-ORDER (Bypasses stock checks)', style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13)),
+                    value: _isPreorder,
+                    activeColor: theme.colorScheme.primary,
+                    checkColor: theme.colorScheme.onPrimary,
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) {
+                      setState(() {
+                        _isPreorder = val ?? false;
+                      });
+                    },
                   ),
                   if (widget.product == null) ...[
                     const SizedBox(height: 20),

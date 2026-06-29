@@ -41,3 +41,6 @@ CREATE TABLE IF NOT EXISTS password_resets (
 
 CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
 
+-- ── Pre-Order Support ────────────────────────────────────────────────────────
+ALTER TABLE products ADD COLUMN is_preorder INTEGER DEFAULT 0;
+

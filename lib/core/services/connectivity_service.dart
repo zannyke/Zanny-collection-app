@@ -39,12 +39,18 @@ class ConnectivityNotifier extends StateNotifier<bool> {
   Future<void> checkConnection() async {
     final hasInternet = await ConnectivityService.hasInternetConnection();
     if (mounted) {
-      if (!state && hasInternet) {
-        // Prevent auto-resolving to true while on the offline screen
-        // so the user gets to see the animated green success transition.
-        return;
+      if (hasInternet) {
+        state = true;
+      } else {
+        // Debounce: check twice before setting to false to prevent transient sleep-wake glitches
+        await Future.delayed(const Duration(milliseconds: 1500));
+        if (mounted) {
+          final doubleCheck = await ConnectivityService.hasInternetConnection();
+          if (!doubleCheck && mounted) {
+            state = false;
+          }
+        }
       }
-      state = hasInternet;
     }
   }
 

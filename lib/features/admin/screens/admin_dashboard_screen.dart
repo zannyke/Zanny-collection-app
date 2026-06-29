@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import '../repositories/admin_repository.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/cloudflare/api_client.dart';
 import '../../../shared/models/models.dart';
@@ -29,6 +32,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   final TextEditingController _advRouteController = TextEditingController(text: '/profile');
   int _currentTab = 0; // 0: Products, 1: Fashion Styles, 2: Orders, 3: Analytics, 4: Adverts
   bool _sendingAdvert = false;
+  bool _updatingBanner = false;
 
   late final PageController _pageController;
   late final ScrollController _tabScrollController;
@@ -791,8 +795,131 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 32),
+          _buildHomepageBannerSection(context, theme),
         ],
       ),
+    );
+  }
+
+  Future<void> _changeBannerImage(BuildContext context, ThemeData theme) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (picked == null) return;
+
+    final file = File(picked.path);
+    setState(() {
+      _updatingBanner = true;
+    });
+
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final uploadedUrl = await repo.uploadProductImage(file);
+
+      final api = ApiClient.instance;
+      final response = await api.put(
+        '/api/settings/homepage_banner_url',
+        data: {'value': uploadedUrl},
+      );
+
+      if (response.statusCode == 200) {
+        ref.read(bannerImageProvider.notifier).updateBanner(uploadedUrl);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Homepage banner updated successfully!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+      } else {
+        throw Exception(response.data?['error'] ?? 'Server error');
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to update banner: $e'),
+          backgroundColor: theme.colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingBanner = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildHomepageBannerSection(BuildContext context, ThemeData theme) {
+    final bannerUrl = ref.watch(bannerImageProvider);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'HOMEPAGE HERO BANNER',
+          style: GoogleFonts.inter(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.0,
+            color: theme.colorScheme.secondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Upload and configure the dynamic banner image displayed at the top of the homepage.',
+          style: GoogleFonts.inter(color: theme.colorScheme.secondary, fontSize: 12.5, height: 1.4),
+        ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: theme.colorScheme.outline),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Current Banner Preview',
+                style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface),
+              ),
+              const SizedBox(height: 12),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: CachedNetworkImage(
+                    imageUrl: bannerUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (ctx, url) => Container(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+                    errorWidget: (ctx, url, err) => Container(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                      child: const Icon(Icons.broken_image_outlined, size: 36),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _updatingBanner ? null : () => _changeBannerImage(context, theme),
+                  child: _updatingBanner
+                      ? const ShimmerPlaceholder(width: 20, height: 20, borderRadius: 10)
+                      : Text('CHANGE BANNER IMAGE', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

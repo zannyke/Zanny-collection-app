@@ -72,7 +72,29 @@ class ProductCard extends ConsumerWidget {
                       ),
                       
                       // Badges
-                      if (product.isNew)
+                      if (product.isPreorder)
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF8E24AA), // Deep Purple for Pre-Orders
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'PRE-ORDER',
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (product.isNew)
                         Positioned(
                           top: 10,
                           left: 10,
@@ -93,8 +115,8 @@ class ProductCard extends ConsumerWidget {
                               ),
                             ),
                           ),
-                        ),
-                      if (product.isSale)
+                        )
+                      else if (product.isSale)
                         Positioned(
                           top: 10,
                           left: 10,

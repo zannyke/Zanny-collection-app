@@ -353,4 +353,28 @@ final adminReviewsProvider = FutureProvider<List<AdminReview>>((ref) async {
   return raw.map((j) => AdminReview.fromJson(Map<String, dynamic>.from(j))).toList();
 });
 
+final bannerImageProvider = StateNotifierProvider<BannerImageNotifier, String>((ref) {
+  return BannerImageNotifier();
+});
+
+class BannerImageNotifier extends StateNotifier<String> {
+  BannerImageNotifier() : super('https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=1000') {
+    loadBanner();
+  }
+
+  Future<void> loadBanner() async {
+    try {
+      final response = await ApiClient.instance.get('/api/settings/homepage_banner_url');
+      if (response.statusCode == 200 && response.data != null && response.data['value'] != null) {
+        state = response.data['value'] as String;
+      }
+    } catch (_) {}
+  }
+
+  void updateBanner(String newUrl) {
+    state = newUrl;
+  }
+}
+
+
 
