@@ -524,13 +524,17 @@ async function handleGetProducts(request, env, origin = '') {
 
   const stmt = env.DB.prepare(query);
   const result = params.length ? await stmt.bind(...params).all() : await stmt.all();
-  return json({ products: result.results.map(row => parseProduct(row, env, origin)) });
+  const res = json({ products: result.results.map(row => parseProduct(row, env, origin)) });
+  res.headers.set('Cache-Control', 'public, max-age=10, s-maxage=10');
+  return res;
 }
 
 async function handleGetProduct(id, env, origin = '') {
   const row = await env.DB.prepare('SELECT *, ROUND(COALESCE((SELECT AVG(f.rating) FROM feedback f WHERE f.product_id = products.id), 0), 1) as avg_rating, COALESCE((SELECT COUNT(f.id) FROM feedback f WHERE f.product_id = products.id), 0) as review_count FROM products WHERE id = ? AND is_deleted = 0').bind(id).first();
   if (!row) return jsonError('Product not found', 404);
-  return json({ product: parseProduct(row, env, origin) });
+  const res = json({ product: parseProduct(row, env, origin) });
+  res.headers.set('Cache-Control', 'public, max-age=10, s-maxage=10');
+  return res;
 }
 
 async function handleCreateProduct(request, env, origin = '') {
