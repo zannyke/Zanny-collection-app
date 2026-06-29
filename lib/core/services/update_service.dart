@@ -40,6 +40,7 @@ class UpdateService {
 
   static const String currentVersion = '1.0.23';
   static const int currentBuild = 42;
+  static const bool isPlayStore = bool.fromEnvironment('PLAY_STORE', defaultValue: false);
 
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
@@ -71,6 +72,12 @@ class UpdateService {
     required BuildContext context,
     bool showFeedback = false,
   }) async {
+    if (isPlayStore) {
+      if (showFeedback && context.mounted) {
+        ZannyFeedback.showSuccess(context, 'Zanny Collection is up to date!');
+      }
+      return false;
+    }
     try {
       final resp = await ApiClient.instance.get(
         '/api/version',

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ConnectivityService {
-  /// Resolves the Supabase host to check if the user is connected to the internet.
+  /// Resolves the Cloudflare API host to check if the user is connected to the internet.
   static Future<bool> hasInternetConnection() async {
     try {
       final result = await InternetAddress.lookup('zanny-collection-api.zannykenya254.workers.dev')

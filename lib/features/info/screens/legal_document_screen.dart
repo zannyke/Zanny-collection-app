@@ -102,10 +102,10 @@ class LegalDocumentScreen extends StatelessWidget {
       _bullet(textTheme, 'Processing, shipping, and tracking your orders'),
       _bullet(textTheme, 'Saving your favorite items to your wishlist'),
       _bullet(textTheme, 'Sending you status notifications and promotional updates'),
-      _bullet(textTheme, 'Managing your authenticated Supabase user session securely'),
+      _bullet(textTheme, 'Managing your authenticated user session securely'),
       
       _h2(textTheme, '3. Payment & Security'),
-      _p(textTheme, 'We do not store or process your raw payment credentials on our database servers. All transactions are securely handled by integrated authorized third-party payment gateways. Our database uses secure SSL encryption and row-level security (RLS) policies to prevent unauthorized data access.'),
+      _p(textTheme, 'We do not store or process your raw payment credentials on our database servers. All transactions are securely handled by integrated authorized third-party payment gateways. Our database uses secure SSL encryption and API-level access isolation to prevent unauthorized data access.'),
       
       _h2(textTheme, '4. Data Retention'),
       _p(textTheme, 'We store your personal profile and order history as long as your account remains active. You can request the deletion of your account and related data at any time by contacting our support team via the Profile screen.'),
