@@ -2,12 +2,14 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import '../cloudflare/api_client.dart';
 import '../theme/app_colors.dart';
-import '../router/app_router.dart';
+import '../../shared/providers/auth_provider.dart';
+import '../../shared/widgets/custom_feedback.dart';
 
 /// Version info fetched from Cloudflare R2 via the Worker API.
 class AppVersionInfo {
@@ -36,8 +38,8 @@ class UpdateService {
 
   static const _channel = MethodChannel('com.example.zanny_collection/install');
 
-  static const String currentVersion = '1.0.14';
-  static const int currentBuild = 26;
+  static const String currentVersion = '1.0.23';
+  static const int currentBuild = 42;
 
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
@@ -70,7 +72,10 @@ class UpdateService {
     bool showFeedback = false,
   }) async {
     try {
-      final resp = await ApiClient.instance.get('/api/version');
+      final resp = await ApiClient.instance.get(
+        '/api/version',
+        queryParameters: {'t': DateTime.now().millisecondsSinceEpoch.toString()},
+      );
       final info = AppVersionInfo.fromJson(resp.data as Map<String, dynamic>);
 
       if (info.build > currentBuild && info.apkUrl.isNotEmpty) {
@@ -78,27 +83,15 @@ class UpdateService {
         _showUpdateDialog(context, info);
         return true;
       } else {
-        if (showFeedback) {
-          scaffoldMessengerKey.currentState?.showSnackBar(
-            const SnackBar(
-              content: Text('Zanny Collection is up to date!'),
-              backgroundColor: AppColors.success,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+        if (showFeedback && context.mounted) {
+          ZannyFeedback.showSuccess(context, 'Zanny Collection is up to date!');
         }
         return false;
       }
     } catch (e) {
       debugPrint('⚠️ Update check failed: $e');
-      if (showFeedback) {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: Text('Failed to check for updates: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+      if (showFeedback && context.mounted) {
+        ZannyFeedback.showError(context, 'Failed to check for updates: $e');
       }
       return false;
     }
@@ -145,221 +138,590 @@ class UpdateService {
     try {
       if (Platform.isAndroid) {
         final success = await _channel.invokeMethod<bool>('installApk', {'filePath': filePath});
-        debugPrint('ℹ️ Native installApk result: $success');
+        if (success != true) {
+          throw PlatformException(
+            code: 'INSTALL_FAILED',
+            message: 'Native installer failed to launch or returned false',
+          );
+        }
       } else {
         final result = await OpenFile.open(filePath, type: 'application/vnd.android.package-archive');
-        debugPrint('ℹ️ OpenFile result: ${result.type} - ${result.message}');
+        if (result.type != ResultType.done) {
+          throw Exception('OpenFile failed: ${result.message}');
+        }
       }
     } catch (e) {
-      debugPrint('⚠️ Error launching native package installer: $e');
+      debugPrint('⚠️ Error launching native package installer: $e. Trying fallback...');
       final result = await OpenFile.open(filePath, type: 'application/vnd.android.package-archive');
-      debugPrint('ℹ️ OpenFile fallback result: ${result.type} - ${result.message}');
+      if (result.type != ResultType.done) {
+        throw Exception('Installation failed: ${result.message} (Details: $e)');
+      }
     }
   }
 }
 
-class _UpdateBottomSheet extends StatefulWidget {
+class _UpdateBottomSheet extends ConsumerStatefulWidget {
   final AppVersionInfo info;
   const _UpdateBottomSheet({required this.info});
 
   @override
-  State<_UpdateBottomSheet> createState() => _UpdateBottomSheetState();
+  ConsumerState<_UpdateBottomSheet> createState() => _UpdateBottomSheetState();
 }
 
-class _UpdateBottomSheetState extends State<_UpdateBottomSheet> {
+class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with TickerProviderStateMixin {
   bool _downloading = false;
   final ValueNotifier<double> _progress = ValueNotifier(0.0);
 
+  late AnimationController _pulseController;
+  late Animation<double> _pulseScale;
+  late Animation<double> _pulseOpacity;
+
+  late AnimationController _entryController;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+
+    _pulseScale = Tween<double>(begin: 0.95, end: 1.3).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _pulseOpacity = Tween<double>(begin: 0.35, end: 0.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _entryController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+
+    _fadeAnimation = CurvedAnimation(parent: _entryController, curve: Curves.easeIn);
+    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(parent: _entryController, curve: Curves.easeOutCubic),
+    );
+
+    _entryController.forward();
+  }
+
   @override
   void dispose() {
+    _pulseController.dispose();
+    _entryController.dispose();
     _progress.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 44, height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.system_update_rounded, color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Update Available',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white, fontWeight: FontWeight.w700,
-                        )),
-                      Text('v${UpdateService.currentVersion} (b${UpdateService.currentBuild}) ➔ v${widget.info.version} (b${widget.info.build})',
-                        style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54)),
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close, color: Colors.white38, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (widget.info.changelog.isNotEmpty) ...[
-              Text(
-                "WHAT'S NEW",
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.accentGold,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                widget.info.changelog,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: Colors.white70,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-            if (_downloading) ...[
-              ValueListenableBuilder<double>(
-                valueListenable: _progress,
-                builder: (_, value, __) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: LinearProgressIndicator(
-                        value: value,
-                        backgroundColor: Colors.white12,
-                        color: Colors.white,
-                        minHeight: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('${(value * 100).toStringAsFixed(0)}% downloaded',
-                      style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54)),
-                  ],
-                ),
-              ),
-            ] else ...[
+    final user = ref.watch(currentUserProvider);
+    final isAdmin = user?.isAdmin == true;
+
+    // Simplified non-technical explanation for regular users, technical logs for admin
+    final displayChangelog = isAdmin
+        ? widget.info.changelog
+        : "This update contains performance improvements, minor bug fixes, and stability updates to provide a smoother shopping experience.";
+
+    return AnimatedBuilder(
+      animation: _entryController,
+      builder: (context, child) {
+        return Transform.translate(
+          offset: Offset(0.0, _slideAnimation.value),
+          child: Opacity(
+            opacity: _fadeAnimation.value,
+            child: child,
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF070B19), // Rich shades of blue-black
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: const Color(0xFF1E3A8A).withValues(alpha: 0.35)), // Royal blue border
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.5),
+              blurRadius: 25,
+              offset: const Offset(0, 12),
+            )
+          ]
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white54,
-                        side: const BorderSide(color: Colors.white12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                  // Pulsing download icon
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      ScaleTransition(
+                        scale: _pulseScale,
+                        child: FadeTransition(
+                          opacity: _pulseOpacity,
+                          child: Container(
+                            width: 64,
+                            height: 64,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF2563EB), // Primary Blue pulse
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
                       ),
-                      child: const Text('Later'),
+                      Container(
+                        width: 48, height: 48,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E3A8A).withValues(alpha: 0.3), // Soft blue tint
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.25)),
+                        ),
+                        child: const Icon(Icons.cloud_download_rounded, color: Color(0xFF60A5FA), size: 24),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('System Update Available',
+                          style: GoogleFonts.inter(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          )),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFBBF24).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFFFBBF24).withValues(alpha: 0.25)),
+                              ),
+                              child: Text(
+                                'v${UpdateService.currentVersion}',
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFFFBBF24),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 6),
+                              child: Icon(Icons.arrow_forward_rounded, color: Colors.white38, size: 14),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.25)),
+                              ),
+                              child: Text(
+                                'v${widget.info.version}',
+                                style: GoogleFonts.inter(
+                                  color: const Color(0xFF10B981),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final hasPermission = await UpdateService.checkInstallPermission();
-                        if (!hasPermission) {
-                          if (!context.mounted) return;
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              backgroundColor: const Color(0xFF111111),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-                              ),
-                              title: Text(
-                                'Permission Required',
-                                style: GoogleFonts.playfairDisplay(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              content: Text(
-                                'To install this update, Zanny Collection needs permission to install unknown apps. Please enable this in the settings page that opens.',
-                                style: GoogleFonts.inter(fontSize: 14, color: Colors.white70, height: 1.5),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(ctx),
-                                  child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
-                                ),
-                                TextButton(
-                                  onPressed: () async {
-                                    Navigator.pop(ctx);
-                                    await UpdateService.requestInstallPermission();
-                                  },
-                                  child: Text(
-                                    'Open Settings',
-                                    style: GoogleFonts.inter(
-                                      color: AppColors.accentGold,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                          return;
-                        }
-
-                        setState(() => _downloading = true);
-                        try {
-                          await UpdateService.downloadAndInstall(widget.info, _progress);
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
-                        } catch (e) {
-                          if (!context.mounted) return;
-                          setState(() => _downloading = false);
-                          scaffoldMessengerKey.currentState?.showSnackBar(
-                            const SnackBar(content: Text('Download failed. Please try again.')),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.04),
+                        shape: BoxShape.circle,
                       ),
-                      child: const Text('Update Now', style: TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Icon(Icons.close, color: Colors.white54, size: 18),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 24),
+              Text(
+                "WHAT'S NEW",
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF60A5FA), // Light blue heading
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withValues(alpha: 0.25), // Blue-grey slate container
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.05)),
+                ),
+                child: Text(
+                  displayChangelog,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFE2E8F0),
+                    fontSize: 12,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 28),
+              if (_downloading) ...[
+                ValueListenableBuilder<double>(
+                  valueListenable: _progress,
+                  builder: (_, value, __) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stacked dual progress bar
+                      Container(
+                        height: 28,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(13),
+                          child: Stack(
+                            children: [
+                              // Older version representation (Base orange/yellow track)
+                              Container(
+                                color: const Color(0xFFFBBF24), // Orange/yellow
+                              ),
+                              // Newer version overriding progress (Green track overlay)
+                              FractionallySizedBox(
+                                widthFactor: value,
+                                child: Container(
+                                  color: const Color(0xFF10B981), // Premium Green
+                                ),
+                              ),
+                              // Centered or spaced percentage and labels overlay
+                              Positioned.fill(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        'v${UpdateService.currentVersion}',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          shadows: [
+                                            const Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        '${(value * 100).toStringAsFixed(0)}%',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w900,
+                                          shadows: [
+                                            const Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        'v${widget.info.version}',
+                                        style: GoogleFonts.inter(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          shadows: [
+                                            const Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            value < 1.0 ? 'Downloading new version...' : 'Installing update...',
+                            style: GoogleFonts.inter(
+                              color: Colors.white60,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          side: BorderSide(color: const Color(0xFF1E3A8A).withValues(alpha: 0.25)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        child: Text('Later', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600)),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          final hasPermission = await UpdateService.checkInstallPermission();
+                          if (!hasPermission) {
+                            if (!context.mounted) return;
+                            showDialog(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                backgroundColor: const Color(0xFF070B19),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  side: BorderSide(color: const Color(0xFF1E3A8A).withValues(alpha: 0.35)),
+                                ),
+                                title: Text(
+                                  'Permission Required',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                content: Text(
+                                  'To install this update, Zanny Collection needs permission to install unknown apps. Please enable this in the settings page.',
+                                  style: GoogleFonts.inter(fontSize: 13, color: Colors.white70, height: 1.5),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    child: Text('Cancel', style: GoogleFonts.inter(color: Colors.white54)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () async {
+                                      Navigator.pop(ctx);
+                                      await UpdateService.requestInstallPermission();
+                                    },
+                                    child: Text(
+                                      'Open Settings',
+                                      style: GoogleFonts.inter(
+                                        color: const Color(0xFF60A5FA),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                            return;
+                          }
+
+                          setState(() => _downloading = true);
+                          try {
+                            await UpdateService.downloadAndInstall(widget.info, _progress);
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            setState(() => _downloading = false);
+                            _showErrorDialog(context, e);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB), // Premium Blue
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          elevation: 2,
+                        ),
+                        child: Text('Update Now', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 8),
             ],
-            const SizedBox(height: 8),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  void _showErrorDialog(BuildContext context, Object error) {
+    final user = ref.read(currentUserProvider);
+    final isAdmin = user?.isAdmin == true;
+    final errorMessage = error.toString().replaceAll('Exception: ', '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        bool showDetails = false;
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF070B19),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(color: const Color(0xFF1E3A8A).withValues(alpha: 0.35)),
+              ),
+              contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                    ),
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: AppColors.error,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Update Interrupted',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'We encountered an issue while downloading the system update. Please verify your internet connection and try again.',
+                    style: GoogleFonts.inter(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (isAdmin) ...[
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () {
+                        setStateDialog(() {
+                          showDetails = !showDetails;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              showDetails ? 'Hide Details' : 'Show Technical Details',
+                              style: GoogleFonts.inter(
+                                color: const Color(0xFF60A5FA),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              showDetails ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                              color: const Color(0xFF60A5FA),
+                              size: 14,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (showDetails) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        constraints: const BoxConstraints(maxHeight: 120),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.02),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+                        ),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            errorMessage,
+                            style: GoogleFonts.firaCode(
+                              color: Colors.white54,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+              actionsAlignment: MainAxisAlignment.center,
+              actionsPadding: const EdgeInsets.only(bottom: 20),
+              actions: [
+                SizedBox(
+                  width: 140,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: Text(
+                      'Dismiss',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

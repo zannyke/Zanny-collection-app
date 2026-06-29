@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/animations.dart';
+import '../../../shared/widgets/custom_feedback.dart';
 
 class NoInternetScreen extends ConsumerStatefulWidget {
   const NoInternetScreen({super.key});
@@ -14,108 +14,40 @@ class NoInternetScreen extends ConsumerStatefulWidget {
   ConsumerState<NoInternetScreen> createState() => _NoInternetScreenState();
 }
 
-enum DiagnosticStatus { pending, checking, success, failed }
-
-class DiagnosticStep {
-  final String label;
-  DiagnosticStatus status;
-
-  DiagnosticStep({
-    required this.label,
-    this.status = DiagnosticStatus.pending,
-  });
-}
-
 class _NoInternetScreenState extends ConsumerState<NoInternetScreen> {
   bool _checking = false;
-  late List<DiagnosticStep> _steps;
-
-  @override
-  void initState() {
-    super.initState();
-    _initSteps();
-  }
-
-  void _initSteps() {
-    _steps = [
-      DiagnosticStep(label: 'Checking cellular & Wi-Fi interfaces'),
-      DiagnosticStep(label: 'Resolving domain name mapping'),
-      DiagnosticStep(label: 'Verifying Zanny server connectivity'),
-    ];
-  }
+  bool _success = false;
 
   Future<void> _runDiagnostics() async {
+    if (_checking || _success) return;
+
     setState(() {
       _checking = true;
-      _steps[0].status = DiagnosticStatus.checking;
-      _steps[1].status = DiagnosticStatus.pending;
-      _steps[2].status = DiagnosticStatus.pending;
     });
 
-    // Step 1: Check general network interfaces
-    await Future.delayed(const Duration(milliseconds: 600));
-    bool step1Passed = false;
-    try {
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 3));
-      step1Passed = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } catch (_) {
-      step1Passed = false;
-    }
+    // Check actual internet connectivity
+    final hasInternet = await ConnectivityService.hasInternetConnection();
 
     if (!mounted) return;
-    setState(() {
-      _steps[0].status = step1Passed ? DiagnosticStatus.success : DiagnosticStatus.failed;
-    });
 
-    if (!step1Passed) {
+    if (hasInternet) {
+      setState(() {
+        _checking = false;
+        _success = true;
+      });
+      // The AnimatedWifiIcon will play its green success animation
+      // and call the completion callback, which transitions to the main app.
+    } else {
       setState(() {
         _checking = false;
       });
-      return;
+      if (mounted) {
+        ZannyFeedback.showError(
+          context,
+          'Connection required. Please check your internet settings and try again.',
+        );
+      }
     }
-
-    // Step 2: Check DNS Resolution
-    setState(() {
-      _steps[1].status = DiagnosticStatus.checking;
-    });
-    await Future.delayed(const Duration(milliseconds: 600));
-    bool step2Passed = false;
-    try {
-      final result = await InternetAddress.lookup('zanny-collection-api.zannykenya254.workers.dev')
-          .timeout(const Duration(seconds: 3));
-      step2Passed = result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } catch (_) {
-      step2Passed = false;
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _steps[1].status = step2Passed ? DiagnosticStatus.success : DiagnosticStatus.failed;
-    });
-
-    if (!step2Passed) {
-      setState(() {
-        _checking = false;
-      });
-      return;
-    }
-
-    // Step 3: API handshake
-    setState(() {
-      _steps[2].status = DiagnosticStatus.checking;
-    });
-    await Future.delayed(const Duration(milliseconds: 600));
-    
-    // Trigger connectivity notifier check
-    await ref.read(connectivityProvider.notifier).checkConnection();
-    final finalInternet = ref.read(connectivityProvider);
-
-    if (!mounted) return;
-    setState(() {
-      _steps[2].status = finalInternet ? DiagnosticStatus.success : DiagnosticStatus.failed;
-      _checking = false;
-    });
   }
 
   @override
@@ -129,10 +61,16 @@ class _NoInternetScreenState extends ConsumerState<NoInternetScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Pulsing Offline Icon
-              const PulsingOfflineIcon(),
-              const SizedBox(height: 40),
-              
+              // Custom animated WiFi icon
+              AnimatedWifiIcon(
+                isChecking: _checking,
+                isSuccess: _success,
+                onSuccessAnimationComplete: () {
+                  ref.read(connectivityProvider.notifier).forceUpdateState(true);
+                },
+              ),
+              const SizedBox(height: 48),
+
               Text(
                 'CONNECTION REQUIRED',
                 style: GoogleFonts.inter(
@@ -143,7 +81,7 @@ class _NoInternetScreenState extends ConsumerState<NoInternetScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              
+
               Text(
                 'Zanny Collection requires an active internet connection to sync products and process transactions. Please check your network connection.',
                 textAlign: TextAlign.center,
@@ -153,40 +91,12 @@ class _NoInternetScreenState extends ConsumerState<NoInternetScreen> {
                   height: 1.6,
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 48),
 
-              // Diagnostics Panel
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  border: Border.all(color: theme.colorScheme.outline, width: 0.5),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'DIAGNOSTICS CHECKLIST',
-                      style: GoogleFonts.inter(
-                        color: theme.colorScheme.secondary,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ..._steps.map((step) => _buildDiagnosticRow(context, step)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-              
               // Retry Button
               PremiumButton(
-                onPressed: _checking ? null : _runDiagnostics,
-                text: 'RETRY CONNECTION',
+                onPressed: (_checking || _success) ? null : _runDiagnostics,
+                text: _checking ? 'CHECKING...' : 'RETRY CONNECTION',
                 isLoading: _checking,
                 type: PremiumButtonType.primary,
               ),
@@ -196,137 +106,261 @@ class _NoInternetScreenState extends ConsumerState<NoInternetScreen> {
       ),
     );
   }
-
-  Widget _buildDiagnosticRow(BuildContext context, DiagnosticStep step) {
-    final theme = Theme.of(context);
-    Widget statusWidget;
-    Color textColor = theme.colorScheme.secondary;
-    
-    switch (step.status) {
-      case DiagnosticStatus.pending:
-        statusWidget = Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: theme.colorScheme.outline, width: 1.0),
-          ),
-        );
-        textColor = theme.colorScheme.secondary.withValues(alpha: 0.6);
-        break;
-      case DiagnosticStatus.checking:
-        statusWidget = SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 1.5,
-            valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary),
-          ),
-        );
-        textColor = theme.colorScheme.onSurface;
-        break;
-      case DiagnosticStatus.success:
-        statusWidget = Icon(
-          Icons.check_circle_rounded,
-          color: theme.colorScheme.primary,
-          size: 16,
-        );
-        textColor = theme.colorScheme.onSurface;
-        break;
-      case DiagnosticStatus.failed:
-        statusWidget = const Icon(
-          Icons.cancel_rounded,
-          color: AppColors.error,
-          size: 16,
-        );
-        textColor = AppColors.error;
-        break;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        children: [
-          statusWidget,
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              step.label,
-              style: GoogleFonts.inter(
-                color: textColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-class PulsingOfflineIcon extends StatefulWidget {
-  const PulsingOfflineIcon({super.key});
+class AnimatedWifiIcon extends StatefulWidget {
+  final bool isChecking;
+  final bool isSuccess;
+  final VoidCallback? onSuccessAnimationComplete;
+
+  const AnimatedWifiIcon({
+    super.key,
+    required this.isChecking,
+    required this.isSuccess,
+    this.onSuccessAnimationComplete,
+  });
 
   @override
-  State<PulsingOfflineIcon> createState() => _PulsingOfflineIconState();
+  State<AnimatedWifiIcon> createState() => _AnimatedWifiIconState();
 }
 
-class _PulsingOfflineIconState extends State<PulsingOfflineIcon> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _glowAnimation;
+class _AnimatedWifiIconState extends State<AnimatedWifiIcon> with TickerProviderStateMixin {
+  late AnimationController _loopController;
+  late AnimationController _successController;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
+    _loopController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
-    _glowAnimation = Tween<double>(begin: 8.0, end: 24.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      duration: const Duration(milliseconds: 2200),
     );
+    _successController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    _successController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        widget.onSuccessAnimationComplete?.call();
+      }
+    });
+
+    _startLoop();
+  }
+
+  void _startLoop() {
+    _loopController.duration = widget.isChecking
+        ? const Duration(milliseconds: 1100)
+        : const Duration(milliseconds: 2200);
+    _loopController.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedWifiIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isSuccess && !oldWidget.isSuccess) {
+      _loopController.stop();
+      _successController.forward(from: 0.0);
+    } else if (!widget.isSuccess) {
+      if (widget.isChecking != oldWidget.isChecking) {
+        _startLoop();
+      }
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _loopController.dispose();
+    _successController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    const errorColor = AppColors.error;
+    const successColor = AppColors.success;
+    const checkingColor = Colors.blueAccent;
+    final baseColor = theme.brightness == Brightness.light ? Colors.black12 : Colors.white12;
+    final activeColor = theme.brightness == Brightness.light ? Colors.black87 : Colors.white;
+
     return AnimatedBuilder(
-      animation: _glowAnimation,
+      animation: Listenable.merge([_loopController, _successController]),
       builder: (context, child) {
+        double progress = 0.0;
+        bool isError = false;
+        double errorProgress = 0.0;
+        Color containerBorderColor = baseColor;
+        Color containerGlowColor = Colors.transparent;
+
+        if (widget.isSuccess) {
+          progress = _successController.value;
+          containerBorderColor = Color.lerp(baseColor, successColor, _successController.value)!;
+          containerGlowColor = successColor.withValues(alpha: 0.25 * _successController.value);
+        } else {
+          final loopVal = _loopController.value;
+          if (widget.isChecking) {
+            progress = loopVal;
+            isError = false;
+            containerBorderColor = Color.lerp(baseColor, checkingColor, (0.5 - (loopVal - 0.5).abs()) * 2)!;
+            containerGlowColor = checkingColor.withValues(alpha: 0.15 * (0.5 - (loopVal - 0.5).abs()) * 2);
+          } else {
+            if (loopVal < 0.6) {
+              progress = loopVal / 0.6;
+              isError = false;
+              containerBorderColor = baseColor;
+              containerGlowColor = Colors.transparent;
+            } else if (loopVal < 0.8) {
+              progress = 1.0;
+              isError = true;
+              double t = (loopVal - 0.6) / 0.2;
+              errorProgress = t;
+              containerBorderColor = Color.lerp(baseColor, errorColor, t)!;
+              containerGlowColor = errorColor.withValues(alpha: 0.25 * t);
+            } else {
+              progress = 1.0;
+              isError = true;
+              errorProgress = 1.0;
+              double t = (loopVal - 0.8) / 0.2;
+              containerBorderColor = Color.lerp(errorColor, baseColor, t)!;
+              containerGlowColor = errorColor.withValues(alpha: 0.25 * (1.0 - t));
+            }
+          }
+        }
+
         return Container(
-          width: 100,
-          height: 100,
+          width: 120,
+          height: 120,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: theme.colorScheme.surface,
             border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: 0.8),
-              width: 1.5,
+              color: containerBorderColor,
+              width: 2.0,
             ),
             boxShadow: [
-              BoxShadow(
-                color: theme.colorScheme.primary.withValues(alpha: 0.25),
-                blurRadius: _glowAnimation.value,
-                spreadRadius: _glowAnimation.value / 4,
-              ),
+              if (containerGlowColor != Colors.transparent)
+                BoxShadow(
+                  color: containerGlowColor,
+                  blurRadius: 20,
+                  spreadRadius: 4,
+                ),
             ],
           ),
           child: Center(
-            child: Icon(
-              Icons.wifi_off_rounded,
-              color: theme.colorScheme.primary,
-              size: 40,
+            child: SizedBox(
+              width: 60,
+              height: 60,
+              child: CustomPaint(
+                painter: WifiPainter(
+                  progress: progress,
+                  isError: isError,
+                  errorProgress: errorProgress,
+                  isSuccess: widget.isSuccess,
+                  baseColor: baseColor,
+                  activeColor: widget.isChecking ? checkingColor : activeColor,
+                  errorColor: errorColor,
+                  successColor: successColor,
+                ),
+              ),
             ),
           ),
         );
       },
     );
+  }
+}
+
+class WifiPainter extends CustomPainter {
+  final double progress;
+  final bool isError;
+  final double errorProgress;
+  final bool isSuccess;
+  final Color baseColor;
+  final Color activeColor;
+  final Color errorColor;
+  final Color successColor;
+
+  WifiPainter({
+    required this.progress,
+    required this.isError,
+    required this.errorProgress,
+    required this.isSuccess,
+    required this.baseColor,
+    required this.activeColor,
+    required this.errorColor,
+    required this.successColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const double pi = 3.1415926535897932;
+    final center = Offset(size.width / 2, size.height - 15);
+    final double maxRadius = size.width / 2 - 5;
+    const double dotRadius = 6.0;
+
+    final double r1 = dotRadius + (maxRadius - dotRadius) * 0.33;
+    final double r2 = dotRadius + (maxRadius - dotRadius) * 0.66;
+    final double r3 = maxRadius;
+
+    final Paint wavePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round;
+
+    final Paint dotPaint = Paint()..style = PaintingStyle.fill;
+
+    Color currentColor(int waveIndex) {
+      if (isSuccess) {
+        bool visible = progress >= (waveIndex / 3.0);
+        return visible ? successColor : baseColor;
+      }
+      if (isError) {
+        return errorColor;
+      }
+      bool visible = progress >= (waveIndex / 3.0);
+      return visible ? activeColor : baseColor;
+    }
+
+    dotPaint.color = currentColor(0);
+    canvas.drawCircle(center, dotRadius, dotPaint);
+
+    void drawWifiArc(double radius, Color color) {
+      wavePaint.color = color;
+      final rect = Rect.fromCircle(center: center, radius: radius);
+      canvas.drawArc(rect, -135 * pi / 180, 90 * pi / 180, false, wavePaint);
+    }
+
+    drawWifiArc(r1, currentColor(1));
+    drawWifiArc(r2, currentColor(2));
+    drawWifiArc(r3, currentColor(3));
+
+    if (isError && errorProgress > 0.0) {
+      final Paint slashPaint = Paint()
+        ..color = errorColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.5
+        ..strokeCap = StrokeCap.round;
+
+      const double padding = 10.0;
+      const Offset start = Offset(padding, padding);
+      final Offset end = Offset(size.width - padding, size.height - padding - 10);
+
+      final Offset currentEnd = Offset(
+        start.dx + (end.dx - start.dx) * errorProgress,
+        start.dy + (end.dy - start.dy) * errorProgress,
+      );
+
+      canvas.drawLine(start, currentEnd, slashPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant WifiPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.isError != isError ||
+        oldDelegate.errorProgress != errorProgress ||
+        oldDelegate.isSuccess != isSuccess;
   }
 }
