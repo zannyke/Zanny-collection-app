@@ -63,7 +63,7 @@ Open [pubspec.yaml](file:///c:/Users/Administrator/Desktop/zanny%20collection%20
 ### Step 2: Build the APK
 Run the Flutter build command using compile-time definitions for your endpoints:
 ```powershell
-C:\flutter\bin\flutter.bat build apk --release --dart-define=CF_WORKER_URL=https://zanny-collection-api.zannykenya254.workers.dev --dart-define=CF_R2_PUBLIC_URL=https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev
+C:\flutter\bin\flutter.bat build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols --dart-define=CF_WORKER_URL=https://zanny-collection-api.zannykenya254.workers.dev --dart-define=CF_R2_PUBLIC_URL=https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev
 ```
 
 ### Step 3: Rename the APK
@@ -84,4 +84,4 @@ Upload the generated `.apk` file to your `zanny-images` R2 bucket. You can do th
 ### Step 5: Update the `version.json` File
 Notify the API of the new release version. Send a authenticated `PUT` request to `/api/version` containing the JSON metadata, or upload `version.json` directly to the R2 bucket.
 
-Once `version.json` contains a `build` number higher than the user's current build, the next time their app launches or runs an update check, they will be prompted to download and install the new update automatically.
+Once `version.json` contains a `build` number higher than the user's current build, the next time their app launches or runs an update check, they will be prompted to download and install the new update automatically. This should only happen when we are sure that cloudfare has everything to avoid the loop of user downloading files that have not been fully pushed to cloudfare.

@@ -1,7 +1,7 @@
 name: zanny_collection
 description: "Zanny Collection - Premium Fashion & Streetwear in Kenya"
 publish_to: 'none'
-version: 1.0.14+26
+version: 1.0.23+42
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -33,6 +33,7 @@ dependencies:
 
   # ── Local Storage ────────────────────────────────────────────────────────────
   shared_preferences: ^2.3.0
+  flutter_secure_storage: ^9.2.2
   hive_flutter: ^1.1.0
 
   # ── File / APK Installer (auto-update) ──────────────────────────────────────

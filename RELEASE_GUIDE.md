@@ -32,7 +32,7 @@ static const int currentBuild = 19; // Must match the "+19" from pubspec.yaml
 ### Step 3: Compile the Release APK
 Run the compiler from the project root:
 ```powershell
-flutter build apk --release --dart-define=CF_WORKER_URL=https://zanny-collection-api.zannykenya254.workers.dev --dart-define=CF_R2_PUBLIC_URL=https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev
+flutter build apk --release --obfuscate --split-debug-info=build/app/outputs/symbols --dart-define=CF_WORKER_URL=https://zanny-collection-api.zannykenya254.workers.dev --dart-define=CF_R2_PUBLIC_URL=https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev
 ```
 
 ### Step 4: Rename the APK

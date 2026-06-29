@@ -11,11 +11,31 @@ export default {
     const method = request.method;
     const origin = url.origin;
 
+    const clientOrigin = request.headers.get('Origin') || '';
+    const allowedOrigins = [
+      'https://zannycollection.com',
+      'https://www.zannycollection.com',
+      'https://zanny-collection.pages.dev'
+    ];
+
+    let corsOrigin = '*';
+    if (clientOrigin) {
+      const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(clientOrigin);
+      if (allowedOrigins.includes(clientOrigin) || isLocalhost) {
+        corsOrigin = clientOrigin;
+      } else {
+        corsOrigin = 'https://zannycollection.com';
+      }
+    }
+
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     };
+    if (clientOrigin) {
+      corsHeaders['Vary'] = 'Origin';
+    }
 
     if (method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders, status: 204 });
@@ -24,8 +44,12 @@ export default {
     try {
       let response;
 
-      // ── Auth ────────────────────────────────────────────────────────────────
-      if (path === '/api/auth/signup' && method === 'POST') {
+      // Proactive D1 & R2 binding validation to avoid production failures
+      if (!env.DB) {
+        response = json({ error: 'Database connection failed: Cloudflare D1 DB binding is missing.' }, 500);
+      } else if (!env.R2) {
+        response = json({ error: 'Storage connection failed: Cloudflare R2 binding is missing.' }, 500);
+      } else if (path === '/api/auth/signup' && method === 'POST') {
         response = await handleSignup(request, env);
       } else if (path === '/api/auth/signin' && method === 'POST') {
         response = await handleSignin(request, env);
@@ -69,6 +93,19 @@ export default {
         response = await handleCreateOrder(request, env);
       } else if (/^\/api\/orders\/[^/]+\/status$/.test(path) && method === 'PUT') {
         response = await handleUpdateOrderStatus(path.split('/')[3], request, env);
+      } else if (path === '/api/feedback/pending' && method === 'GET') {
+        response = await handleGetPendingFeedback(request, env);
+      } else if (path === '/api/feedback' && method === 'POST') {
+        response = await handlePostFeedback(request, env);
+      } else if (/^\/api\/products\/[^/]+\/reviews$/.test(path) && method === 'GET') {
+        response = await handleGetProductReviews(path.split('/')[3], request, env);
+      } else if (path === '/api/admin/reviews' && method === 'GET') {
+        response = await handleGetAdminReviews(request, env);
+      } else if (/^\/api\/orders\/[^/]+\/dismiss-review$/.test(path) && method === 'POST') {
+        response = await handleDismissReview(path.split('/')[3], request, env);
+      } else if (/^\/api\/orders\/[^/]+\/reviewed-products$/.test(path) && method === 'GET') {
+        response = await handleGetOrderReviewedProducts(path.split('/')[3], request, env);
+
 
       // ── Street Styles ───────────────────────────────────────────────────────
       } else if (path === '/api/styles' && method === 'GET') {
@@ -93,6 +130,8 @@ export default {
         response = await handleGetVersion(env);
       } else if (path === '/api/version' && method === 'PUT') {
         response = await handleSetVersion(request, env);
+      } else if (path === '/api/advertise' && method === 'POST') {
+        response = await handleSendAdvertisement(request, env);
 
       // ── File Upload (APK / Images) ────────────────────────────────────────
       } else if (path === '/api/upload' && method === 'POST') {
@@ -277,7 +316,6 @@ function parseJsonArray(val) {
 // ════════════════════════════════════════════════════════════════════════════
 
 async function handleSignup(request, env) {
-  await ensureUserSchema(env);
   const body = await request.json().catch(() => ({}));
   const { email, password, full_name } = body;
   if (!email || !password) return jsonError('Email and password are required', 400);
@@ -306,7 +344,6 @@ async function handleSignup(request, env) {
 }
 
 async function handleSignin(request, env) {
-  await ensureUserSchema(env);
   const body = await request.json().catch(() => ({}));
   const { email, password } = body;
   if (!email || !password) return jsonError('Email and password are required', 400);
@@ -342,7 +379,6 @@ async function handleSignin(request, env) {
 }
 
 async function handleGetProfile(request, env) {
-  await ensureUserSchema(env);
   const payload = await requireUser(request, env);
   const user = await env.DB.prepare(
     'SELECT * FROM users WHERE id = ?'
@@ -361,7 +397,6 @@ async function handleGetProfile(request, env) {
 }
 
 async function handleUpdateProfile(request, env) {
-  await ensureUserSchema(env);
   const payload = await requireUser(request, env);
   const { full_name, phone, avatar_url } = await request.json().catch(() => ({}));
   
@@ -443,7 +478,9 @@ function parseProduct(row, env, origin = '') {
     is_new: isNew,
     is_sale: isSale,
     stock: row.stock !== undefined ? row.stock : 10,
-    is_active: row.is_deleted === 0 || row.is_active === 1
+    is_active: row.is_deleted === 0 || row.is_active === 1,
+    avg_rating: Math.round((row.avg_rating || 0) * 10) / 10,
+    review_count: row.review_count || 0
   };
 }
 
@@ -452,9 +489,14 @@ async function handleGetProducts(request, env, origin = '') {
   const category = url.searchParams.get('category');
   const search = url.searchParams.get('search');
   const sort = url.searchParams.get('sort') || 'default';
-  const limit = Math.min(parseInt(url.searchParams.get('limit') || '200'), 500);
+  
+  let limit = parseInt(url.searchParams.get('limit') || '200', 10);
+  if (isNaN(limit) || limit <= 0) {
+    limit = 200;
+  }
+  limit = Math.min(limit, 500);
 
-  let query = 'SELECT * FROM products WHERE is_deleted = 0';
+  let query = 'SELECT *, ROUND(COALESCE((SELECT AVG(f.rating) FROM feedback f WHERE f.product_id = products.id), 0), 1) as avg_rating, COALESCE((SELECT COUNT(f.id) FROM feedback f WHERE f.product_id = products.id), 0) as review_count FROM products WHERE is_deleted = 0';
   const params = [];
 
   if (category) {
@@ -486,7 +528,7 @@ async function handleGetProducts(request, env, origin = '') {
 }
 
 async function handleGetProduct(id, env, origin = '') {
-  const row = await env.DB.prepare('SELECT * FROM products WHERE id = ? AND is_deleted = 0').bind(id).first();
+  const row = await env.DB.prepare('SELECT *, ROUND(COALESCE((SELECT AVG(f.rating) FROM feedback f WHERE f.product_id = products.id), 0), 1) as avg_rating, COALESCE((SELECT COUNT(f.id) FROM feedback f WHERE f.product_id = products.id), 0) as review_count FROM products WHERE id = ? AND is_deleted = 0').bind(id).first();
   if (!row) return jsonError('Product not found', 404);
   return json({ product: parseProduct(row, env, origin) });
 }
@@ -501,12 +543,14 @@ async function handleCreateProduct(request, env, origin = '') {
   const badge = data.is_new ? 'NEW' : (data.is_sale ? 'SALE' : null);
 
   await env.DB.prepare(`
-    INSERT INTO products (id, name, category, description, price, original_price, image_url, gallery_urls, colors, sizes, badge, is_deleted)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    INSERT INTO products (id, name, subtitle, category, description, price, original_price, image_url, gallery_urls, colors, sizes, badge, is_new, is_sale, stock, is_deleted)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
   `).bind(
-    id, data.name || '', data.category || data.category_slug || '', data.description || '',
+    id, data.name || '', data.subtitle || '', data.category || data.category_slug || '', data.description || '',
     data.price || 0, data.original_price || null, mainImage, galleryUrls,
-    JSON.stringify(data.colors || []), JSON.stringify(data.sizes || []), badge
+    JSON.stringify(data.colors || []), JSON.stringify(data.sizes || []), badge,
+    data.is_new ? 1 : 0, data.is_sale ? 1 : 0,
+    data.stock !== undefined ? data.stock : 10
   ).run();
 
   if (data.send_push === true) {
@@ -529,16 +573,25 @@ async function handleUpdateProduct(id, request, env, origin = '') {
   const badge = data.is_new ? 'NEW' : (data.is_sale ? 'SALE' : null);
 
   await env.DB.prepare(`
-    UPDATE products SET name=?, category=?, description=?, price=?, original_price=?,
-    image_url=?, gallery_urls=?, colors=?, sizes=?, badge=?, is_deleted=?
+    UPDATE products SET name=?, subtitle=?, category=?, description=?, price=?, original_price=?,
+    image_url=?, gallery_urls=?, colors=?, sizes=?, badge=?, is_new=?, is_sale=?, stock=?, is_deleted=?
     WHERE id=?
   `).bind(
-    data.name || '', data.category || data.category_slug || '', data.description || '',
+    data.name || '', data.subtitle || '', data.category || data.category_slug || '', data.description || '',
     data.price || 0, data.original_price || null, mainImage, galleryUrls,
     JSON.stringify(data.colors || []), JSON.stringify(data.sizes || []), badge,
+    data.is_new ? 1 : 0, data.is_sale ? 1 : 0,
+    data.stock !== undefined ? data.stock : 10,
     data.is_deleted === true || data.is_active === false ? 1 : 0,
     id
   ).run();
+
+  if (data.send_push === true) {
+    const title = `Restocked: ${data.name}! 🚀`;
+    const body = data.push_body || `${data.name} is back in stock. Tap to view!`;
+    const route = `/product/${id}`;
+    await broadcastFcmNotification(env, title, body, route);
+  }
 
   const product = await env.DB.prepare('SELECT * FROM products WHERE id = ?').bind(id).first();
   return json({ product: parseProduct(product, env, origin) });
@@ -546,6 +599,34 @@ async function handleUpdateProduct(id, request, env, origin = '') {
 
 async function handleDeleteProduct(id, request, env) {
   await requireAdmin(request, env);
+  
+  // Fetch product to find associated images
+  const product = await env.DB.prepare('SELECT image_url, gallery_urls FROM products WHERE id = ?').bind(id).first();
+  if (product) {
+    const keysToDelete = [];
+    if (product.image_url) {
+      const mainKey = getR2Key(product.image_url);
+      if (mainKey) keysToDelete.push(mainKey);
+    }
+    if (product.gallery_urls) {
+      const gallery = parseJsonArray(product.gallery_urls);
+      for (const img of gallery) {
+        const galKey = getR2Key(img);
+        if (galKey) keysToDelete.push(galKey);
+      }
+    }
+    
+    // Delete files from Cloudflare R2
+    for (const key of keysToDelete) {
+      try {
+        console.log(`Deleting R2 object: ${key}`);
+        await env.R2.delete(key);
+      } catch (err) {
+        console.error(`Failed to delete R2 object ${key}:`, err);
+      }
+    }
+  }
+
   await env.DB.prepare('UPDATE products SET is_deleted = 1 WHERE id = ?').bind(id).run();
   return json({ success: true });
 }
@@ -605,34 +686,253 @@ async function handleGetOrders(request, env) {
   return json({ orders });
 }
 
+async function sendResendEmail(env, to, subject, html) {
+  if (!env.RESEND_API_KEY) {
+    console.warn("⚠️ env.RESEND_API_KEY not configured, skipping email.");
+    return;
+  }
+  const fromEmail = env.RESEND_SENDER || "Zanny Collection <onboarding@resend.dev>";
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: to,
+        subject: subject,
+        html: html
+      })
+    });
+    const result = await res.json();
+    if (!res.ok) {
+      console.error("❌ Resend error:", result);
+    } else {
+      console.log(`✅ Email sent successfully: ${result.id}`);
+    }
+  } catch (e) {
+    console.error("❌ Resend fetch failed:", e.message);
+  }
+}
+
 async function handleCreateOrder(request, env) {
   const payload = await requireUser(request, env);
   const data = await request.json().catch(() => ({}));
-  const id = data.id || `ZC_ORD_${Date.now()}`;
-  await env.DB.prepare(`
-    INSERT INTO orders (id, user_id, items, total_amount, status, delivery_address, recipient_name, recipient_phone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    id, payload.sub,
-    JSON.stringify(data.items || []), data.total_amount || 0,
-    data.status || 'pending',
-    data.delivery_address || '', data.recipient_name || '', data.recipient_phone || ''
-  ).run();
-  return json({ id, success: true }, 201);
+  
+  // 1. Fetch user to check restricted_from_cod
+  const user = await env.DB.prepare('SELECT restricted_from_cod, email FROM users WHERE id = ?').bind(payload.sub).first();
+  const paymentMethod = data.payment_method || 'cod';
+
+  if (paymentMethod === 'cod' && user && user.restricted_from_cod === 1) {
+    return json({ error: 'Cash on Delivery is currently restricted for your account. Please pay upfront using M-Pesa.' }, 400);
+  }
+
+  // 2. Live Stock Check
+  const items = data.items || [];
+  for (const item of items) {
+    const prodId = item.product_id || item.product?.id || '';
+    if (!prodId) return json({ error: 'Invalid product details' }, 400);
+    const prod = await env.DB.prepare('SELECT name, stock FROM products WHERE id = ? AND is_deleted = 0').bind(prodId).first();
+    if (!prod) {
+      return json({ error: `Product not found: ${item.product_name || prodId}` }, 400);
+    }
+    if (prod.stock < item.quantity) {
+      return json({ error: `Insufficient stock for item: ${prod.name}. Available: ${prod.stock}, requested: ${item.quantity}.` }, 400);
+    }
+  }
+
+  // 3. Generate unique Order ID in the format ORD-XXXXXX (last 6 digits of current timestamp)
+  const orderId = 'ORD-' + String(Date.now()).slice(-6);
+
+  // 4. Update Inventory and Insert Order Atomically (via batch transaction)
+  const statements = [];
+  for (const item of items) {
+    const prodId = item.product_id || item.product?.id || '';
+    statements.push(
+      env.DB.prepare('UPDATE products SET stock = stock - ?, sold = sold + ? WHERE id = ?')
+        .bind(item.quantity, item.quantity, prodId)
+    );
+  }
+
+  // 5. Insert into DB (serialize Snapshots of items)
+  statements.push(
+    env.DB.prepare(`
+      INSERT INTO orders (id, user_id, items, total_amount, status, delivery_address, shipping_address, recipient_name, recipient_phone, phone_number, mpesa_receipt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      orderId, payload.sub,
+      JSON.stringify(items), data.total_amount || 0,
+      'pending',
+      data.delivery_address || '', data.delivery_address || '',
+      data.recipient_name || '', data.recipient_phone || '', data.recipient_phone || '',
+      paymentMethod === 'mpesa' ? (data.mpesa_receipt || 'STK_PUSH_PENDING') : ''
+    )
+  );
+
+  try {
+    await env.DB.batch(statements);
+  } catch (err) {
+    console.error("Order batch execution failed:", err);
+    if (err.message && (err.message.includes('Insufficient stock') || err.message.includes('ABORT'))) {
+      return json({ error: 'One or more items in your cart are out of stock. Please adjust your cart and try again.' }, 400);
+    }
+    return json({ error: 'Failed to place order due to a database/concurrency error. Please try again.' }, 500);
+  }
+
+  // 6. Send Placement Emails (Customer Confirmation & Admin Notification)
+  const customerEmail = user ? user.email : '';
+  const adminEmail = 'zannykenya254@gmail.com';
+  
+  let itemsHtml = '';
+  for (const item of items) {
+    itemsHtml += `
+      <tr style="border-bottom: 1px solid #eee;">
+        <td style="padding: 10px 0;">
+          <strong>${item.product_name || item.product?.name || 'Product'}</strong><br/>
+          <span style="color: #666; font-size: 11px;">Size: ${item.selected_size || ''} | Color: ${item.selected_color || ''}</span>
+        </td>
+        <td style="padding: 10px 0; text-align: center;">${item.quantity}</td>
+        <td style="padding: 10px 0; text-align: right;">KES ${(item.product_price || item.product?.price || 0) * item.quantity}</td>
+      </tr>
+    `;
+  }
+
+  // Customer Email
+  if (customerEmail) {
+    const subject = `Your Zanny Collection Order #${orderId} Confirmation`;
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+        <h2 style="color: #0A0A0A; border-bottom: 2px solid #0A0A0A; padding-bottom: 10px;">Order Confirmation</h2>
+        <p>Hello,</p>
+        <p>Thank you for shopping with <strong>Zanny Collection</strong>! Your order has been successfully placed.</p>
+        <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+          <p><strong>Order ID:</strong> ${orderId}</p>
+          <p><strong>Total Amount:</strong> KES ${data.total_amount}</p>
+          <p><strong>Delivery Address:</strong> ${data.delivery_address || ''}</p>
+          <p><strong>Recipient Name:</strong> ${data.recipient_name || ''}</p>
+          <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'M-Pesa'}</p>
+        </div>
+        <h3>Items Ordered:</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+              <th style="padding: 8px 0;">Item</th>
+              <th style="padding: 8px 0; text-align: center;">Qty</th>
+              <th style="padding: 8px 0; text-align: right;">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+        <p style="text-align: center; margin-top: 30px;">
+          <a href="https://zannycollection.com/orders?id=${orderId}" style="background-color: #1E88E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">TRACK ORDER</a>
+        </p>
+        <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+          Zanny Collection. All rights reserved.
+        </p>
+      </div>
+    `;
+    await sendResendEmail(env, customerEmail, subject, html);
+  }
+
+  // Admin Email
+  {
+    const subject = `New Zanny Collection Order Received: #${orderId}`;
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+        <h2 style="color: #d32f2f; border-bottom: 2px solid #d32f2f; padding-bottom: 10px;">New Order Received</h2>
+        <p>A new order has been placed on Zanny Collection.</p>
+        <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+          <p><strong>Order ID:</strong> ${orderId}</p>
+          <p><strong>Customer Email:</strong> ${customerEmail || 'Guest'}</p>
+          <p><strong>Total Amount:</strong> KES ${data.total_amount}</p>
+          <p><strong>Delivery Address:</strong> ${data.delivery_address || ''}</p>
+          <p><strong>Recipient Name:</strong> ${data.recipient_name || ''}</p>
+          <p><strong>Recipient Phone:</strong> ${data.recipient_phone || ''}</p>
+          <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'M-Pesa'}</p>
+        </div>
+        <h3>Items Ordered:</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+              <th style="padding: 8px 0;">Item</th>
+              <th style="padding: 8px 0; text-align: center;">Qty</th>
+              <th style="padding: 8px 0; text-align: right;">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+        <p style="text-align: center; margin-top: 30px;">
+          <a href="https://zanny-collection.pages.dev/admin" style="background-color: #0A0A0A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">GO TO ADMIN DASHBOARD</a>
+        </p>
+        <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+          Zanny Collection. All rights reserved.
+        </p>
+      </div>
+    `;
+    await sendResendEmail(env, adminEmail, subject, html);
+  }
+
+  // 7. Push Notifications — admin (new order alert) + customer (confirmation)
+  try {
+    const adminUsers = await env.DB.prepare(
+      "SELECT id FROM users WHERE is_admin = 1 OR email = 'admin@zannycollection.com'"
+    ).all();
+    const adminPushPromises = (adminUsers.results || []).map(a =>
+      sendFcmToUser(env, a.id, '🛍️ New Order!', `Order #${orderId} placed for KES ${data.total_amount || 0} — tap to review.`, '/orders')
+    );
+    await Promise.all([...adminPushPromises,
+      sendFcmToUser(env, payload.sub, '✅ Order Confirmed!', `Your order #${orderId} has been placed. We'll get it ready for you!`, '/orders')
+    ]);
+  } catch (e) {
+    console.warn('FCM order placement push failed:', e.message);
+  }
+
+  return json({ id: orderId, success: true }, 201);
 }
 
 async function handleUpdateOrderStatus(orderId, request, env) {
-  await requireAdmin(request, env);
-  const { status, items } = await request.json().catch(() => ({}));
-  
+  const userPayload = await requireUser(request, env);
+  const { status, items, tracking_number } = await request.json().catch(() => ({}));
+
+  // Fetch current order state
+  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(orderId).first();
+  if (!order) return jsonError('Order not found', 404);
+
+  // If status is the same, just update other properties
+  if (order.status === status && !items && !tracking_number) {
+    return json({ success: true });
+  }
+
+  // Authorize user: either admin, or the customer themselves (only if status is cancelled and current status is pending)
+  const isAdmin = userPayload.is_admin || userPayload.email === 'admin@zannycollection.com';
+  if (!isAdmin) {
+    if (order.user_id !== userPayload.sub) {
+      return jsonError('Unauthorized', 403);
+    }
+    if (status !== 'cancelled' || order.status !== 'pending') {
+      return jsonError('Customers can only cancel pending orders', 400);
+    }
+  }
+
   let query = 'UPDATE orders SET status = ?';
   const params = [status];
-  
+
   if (items) {
     query += ', items = ?';
     params.push(JSON.stringify(items));
   }
-  
+
+  if (tracking_number !== undefined) {
+    query += ', tracking_number = ?';
+    params.push(tracking_number);
+  }
+
   if (status === 'confirmed') {
     query += ', confirmed_at = datetime(\'now\')';
   } else if (status === 'shipped' || status === 'delivering') {
@@ -640,13 +940,390 @@ async function handleUpdateOrderStatus(orderId, request, env) {
   } else if (status === 'delivered') {
     query += ', delivered_at = datetime(\'now\')';
   }
-  
+
   query += ' WHERE id = ?';
   params.push(orderId);
-  
+
   await env.DB.prepare(query).bind(...params).run();
+
+  // If status has changed, perform side effects (emails, inventory, trust system)
+  if (order.status !== status) {
+    // Retrieve user email
+    const dbUser = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(order.user_id).first();
+    const customerEmail = dbUser ? dbUser.email : '';
+
+    const itemsList = parseJsonArray(items || order.items);
+    let itemsHtml = '';
+    for (const item of itemsList) {
+      itemsHtml += `
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 10px 0;">
+            <strong>${item.product_name || item.product?.name || 'Product'}</strong><br/>
+            <span style="color: #666; font-size: 11px;">Size: ${item.selected_size || ''} | Color: ${item.selected_color || ''}</span>
+          </td>
+          <td style="padding: 10px 0; text-align: center;">${item.quantity}</td>
+          <td style="padding: 10px 0; text-align: right;">KES ${(item.product_price || item.product?.price || 0) * item.quantity}</td>
+        </tr>
+      `;
+    }
+
+    if (status === 'shipped' || status === 'delivering') {
+      // Send Shipped Email to customer
+      if (customerEmail) {
+        const finalTracking = tracking_number || order.tracking_number || '';
+        const subject = `Your Order #${orderId} has Shipped!`;
+        const html = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+            <h2 style="color: #8e24aa; border-bottom: 2px solid #8e24aa; padding-bottom: 10px;">Your Order has Shipped!</h2>
+            <p>Great news! Your order <strong>#${orderId}</strong> has been shipped and is on its way to you.</p>
+            ${finalTracking ? `
+              <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+                <p><strong>Tracking Identifier:</strong> ${finalTracking}</p>
+              </div>
+              <p style="text-align: center; margin-top: 30px;">
+                <a href="${finalTracking.startsWith('http') ? finalTracking : 'https://www.google.com/search?q=' + encodeURIComponent(finalTracking)}" style="background-color: #8e24aa; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">TRACK SHIPMENT</a>
+              </p>
+            ` : ''}
+            <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+              Zanny Collection. All rights reserved.
+            </p>
+          </div>
+        `;
+        await sendResendEmail(env, customerEmail, subject, html);
+      }
+      // Push notification to customer: order shipped
+      await sendFcmToUser(env, order.user_id, '📦 Your Order is on the Way!', `Order #${orderId} has shipped! We'll notify you when it arrives.`, '/orders').catch(() => {});
+    } else if (status === 'delivered') {
+      // Send Delivered Email to customer (Styled Receipt & Review Link)
+      if (customerEmail) {
+        const subject = `Your Order #${orderId} has been Delivered!`;
+        const html = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+            <h2 style="color: #43a047; border-bottom: 2px solid #43a047; padding-bottom: 10px;">Your Order has been Delivered!</h2>
+            <p>Hello,</p>
+            <p>Your order <strong>#${orderId}</strong> has been successfully delivered. Thank you for shopping with us!</p>
+            <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+              <p><strong>Order ID:</strong> ${orderId}</p>
+              <p><strong>Total Paid:</strong> KES ${order.total_amount}</p>
+              <p><strong>Shipping Address:</strong> ${order.delivery_address || order.shipping_address || ''}</p>
+            </div>
+            <h3>Receipt Summary:</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                  <th style="padding: 8px 0;">Item</th>
+                  <th style="padding: 8px 0; text-align: center;">Qty</th>
+                  <th style="padding: 8px 0; text-align: right;">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+            <p style="text-align: center; margin-top: 35px;">
+              <a href="https://zannycollection.com/account" style="background-color: #43a047; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">LEAVE A REVIEW</a>
+            </p>
+            <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+              Zanny Collection. All rights reserved.
+            </p>
+          </div>
+        `;
+        await sendResendEmail(env, customerEmail, subject, html);
+      }
+      // Push notification to customer: order delivered
+      await sendFcmToUser(env, order.user_id, '🎉 Order Delivered!', `Your order #${orderId} has arrived! Tap to leave a review.`, '/orders').catch(() => {});
+
+      // Trust system: increment successful orders, check COD privilege restoration
+      const user = await env.DB.prepare('SELECT consecutive_successful_orders FROM users WHERE id = ?').bind(order.user_id).first();
+      if (user) {
+        const successes = (user.consecutive_successful_orders || 0) + 1;
+        if (successes >= 3) {
+          await env.DB.prepare('UPDATE users SET consecutive_cancellations = 0, restricted_from_cod = 0, consecutive_successful_orders = 0 WHERE id = ?').bind(order.user_id).run();
+        } else {
+          await env.DB.prepare('UPDATE users SET consecutive_successful_orders = ? WHERE id = ?').bind(successes, order.user_id).run();
+        }
+      }
+    } else if (status === 'cancelled') {
+      // 1. Inventory Restoration
+      for (const item of itemsList) {
+        const prodId = item.product_id || item.product?.id || '';
+        if (prodId) {
+          await env.DB.prepare('UPDATE products SET stock = stock + ?, sold = sold - ? WHERE id = ?')
+            .bind(item.quantity, item.quantity, prodId)
+            .run();
+        }
+      }
+
+      // 2. Trust system penalty
+      const user = await env.DB.prepare('SELECT consecutive_cancellations FROM users WHERE id = ?').bind(order.user_id).first();
+      if (user) {
+        const cancellations = (user.consecutive_cancellations || 0) + 1;
+        const restrict = cancellations >= 3 ? 1 : 0;
+        await env.DB.prepare('UPDATE users SET consecutive_cancellations = ?, restricted_from_cod = ?, consecutive_successful_orders = 0 WHERE id = ?').bind(cancellations, restrict, order.user_id).run();
+      }
+
+      // 3. Admin Notification Email of cancellation
+      const adminEmail = 'zannykenya254@gmail.com';
+      const subject = `Order Cancelled: #${orderId}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+          <h2 style="color: #e53935; border-bottom: 2px solid #e53935; padding-bottom: 10px;">Order Cancelled by Customer</h2>
+          <p>Order <strong>#${orderId}</strong> has been cancelled by the customer.</p>
+          <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+            <p><strong>Order ID:</strong> ${orderId}</p>
+            <p><strong>Total Amount:</strong> KES ${order.total_amount}</p>
+          </div>
+          <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+            Zanny Collection. All rights reserved.
+          </p>
+        </div>
+      `;
+      await sendResendEmail(env, adminEmail, subject, html);
+      // Push notification to customer: order cancelled
+      await sendFcmToUser(env, order.user_id, 'Order Cancelled', `Your order #${orderId} has been cancelled. We hope to serve you again!`, '/orders').catch(() => {});
+      // Push notification to admin: customer cancelled
+      const cancelAdmins = await env.DB.prepare("SELECT id FROM users WHERE is_admin = 1 OR email = 'admin@zannycollection.com'").all();
+      await Promise.all((cancelAdmins.results || []).map(a =>
+        sendFcmToUser(env, a.id, '❌ Order Cancelled', `Customer cancelled order #${orderId} for KES ${order.total_amount}.`, '/orders').catch(() => {})
+      ));
+    }
+  }
+
   return json({ success: true });
 }
+
+async function handleGetPendingFeedback(request, env) {
+  const payload = await requireUser(request, env);
+  const userId = payload.sub;
+
+  // Fetch the last 5 delivered orders that are not permanently dismissed
+  const ordersResult = await env.DB.prepare(`
+    SELECT * FROM orders
+    WHERE user_id = ? 
+      AND status = 'delivered'
+      AND (review_prompt_dismissed = 0 OR review_prompt_dismissed IS NULL)
+    ORDER BY created_at DESC
+    LIMIT 5
+  `).bind(userId).all();
+
+  const orders = ordersResult.results || [];
+  if (orders.length === 0) {
+    return json({ pending: false });
+  }
+
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  const now = Date.now();
+
+  for (const order of orders) {
+    // Enforce 1-hour delay after delivery before showing review prompt
+    if (order.delivered_at) {
+      const deliveredTime = new Date(order.delivered_at).getTime();
+      if (now - deliveredTime < ONE_HOUR_MS) {
+        continue; // Skip this order — not enough time has passed
+      }
+    }
+
+    // Fetch all feedback entries submitted for this order
+    const feedbacksResult = await env.DB.prepare(
+      'SELECT product_id FROM feedback WHERE order_id = ?'
+    ).bind(order.id).all();
+    const feedbacks = feedbacksResult.results || [];
+    const reviewedProductIds = new Set(feedbacks.map(f => f.product_id).filter(Boolean));
+
+    const allItems = parseJsonArray(order.items);
+    // Filter to keep only the items that have not been reviewed yet
+    const unreviewedItems = allItems.filter(item => {
+      const productId = item.product?.id || item.product_id;
+      return productId && !reviewedProductIds.has(productId);
+    });
+
+    if (unreviewedItems.length > 0) {
+      return json({
+        pending: true,
+        order: {
+          id: order.id,
+          items: unreviewedItems,
+          total_amount: order.total_amount,
+          created_at: order.created_at
+        }
+      });
+    } else {
+      // All items in this order have been reviewed. Mark the order as dismissed permanently.
+      await env.DB.prepare(
+        'UPDATE orders SET review_prompt_dismissed = 1 WHERE id = ?'
+      ).bind(order.id).run();
+    }
+  }
+
+  return json({ pending: false });
+}
+
+async function handleGetOrderReviewedProducts(orderId, request, env) {
+  const payload = await requireUser(request, env);
+  const userId = payload.sub;
+
+  // Verify the order belongs to this user
+  const order = await env.DB.prepare(
+    'SELECT id FROM orders WHERE id = ? AND user_id = ?'
+  ).bind(orderId, userId).first();
+
+  if (!order) {
+    return jsonError('Order not found', 404);
+  }
+
+  const feedbacksResult = await env.DB.prepare(
+    'SELECT product_id FROM feedback WHERE order_id = ? AND product_id IS NOT NULL'
+  ).bind(orderId).all();
+
+  const reviewedProductIds = (feedbacksResult.results || []).map(f => f.product_id);
+  return json({ reviewed_product_ids: reviewedProductIds });
+}
+
+async function handlePostFeedback(request, env) {
+  const payload = await requireUser(request, env);
+  const userId = payload.sub;
+  const { order_id, product_id, rating, comment } = await request.json().catch(() => ({}));
+
+  if (!order_id || !rating) {
+    return jsonError('order_id and rating are required', 400);
+  }
+
+  const order = await env.DB.prepare(
+    'SELECT * FROM orders WHERE id = ? AND user_id = ?'
+  ).bind(order_id, userId).first();
+
+  if (!order) {
+    return jsonError('Order not found', 404);
+  }
+
+  if (order.status !== 'delivered') {
+    return jsonError('Order must be delivered to leave feedback', 400);
+  }
+
+  let existingFeedback;
+  if (product_id) {
+    existingFeedback = await env.DB.prepare(
+      'SELECT id FROM feedback WHERE order_id = ? AND product_id = ?'
+    ).bind(order_id, product_id).first();
+  } else {
+    existingFeedback = await env.DB.prepare(
+      'SELECT id FROM feedback WHERE order_id = ?'
+    ).bind(order_id).first();
+  }
+
+  if (existingFeedback) {
+    return jsonError('Feedback has already been submitted for this item', 409);
+  }
+
+  const sanitizedComment = (comment || '').replace(/<[^>]*>?/gm, '').substring(0, 1000);
+  const id = `FB-${crypto.randomUUID().slice(-12)}`;
+
+  // Insert feedback
+  await env.DB.prepare(
+    'INSERT INTO feedback (id, order_id, product_id, user_id, rating, comment) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(id, order_id, product_id || null, userId, rating, sanitizedComment).run();
+
+  // Check if there are any remaining unreviewed items in this order
+  const feedbacksResult = await env.DB.prepare(
+    'SELECT product_id FROM feedback WHERE order_id = ?'
+  ).bind(order_id).all();
+  const feedbacks = feedbacksResult.results || [];
+  const reviewedProductIds = new Set(feedbacks.map(f => f.product_id).filter(Boolean));
+
+  const allItems = parseJsonArray(order.items);
+  const unreviewedItems = allItems.filter(item => {
+    const pId = item.product?.id || item.product_id;
+    return pId && !reviewedProductIds.has(pId);
+  });
+
+  if (unreviewedItems.length === 0) {
+    // All items reviewed! Mark order as dismissed permanently.
+    await env.DB.prepare(
+      'UPDATE orders SET review_prompt_dismissed = 1 WHERE id = ?'
+    ).bind(order_id).run();
+  }
+
+  return json({ success: true, id });
+}
+
+async function handleDismissReview(orderId, request, env) {
+  const payload = await requireUser(request, env);
+  const userId = payload.sub;
+
+  const order = await env.DB.prepare(
+    'SELECT id FROM orders WHERE id = ? AND user_id = ?'
+  ).bind(orderId, userId).first();
+
+  if (!order) {
+    return jsonError('Order not found', 404);
+  }
+
+  await env.DB.prepare(
+    'UPDATE orders SET review_prompt_dismissed = 1 WHERE id = ?'
+  ).bind(orderId).run();
+
+  return json({ success: true });
+}
+
+async function handleGetProductReviews(productId, request, env) {
+  const reviews = await env.DB.prepare(`
+    SELECT f.id, f.rating, f.comment, f.created_at, u.full_name, u.avatar_url
+    FROM feedback f
+    LEFT JOIN users u ON f.user_id = u.id
+    WHERE f.product_id = ?
+    ORDER BY f.created_at DESC
+  `).bind(productId).all();
+
+  const reviewsList = reviews.results || [];
+  
+  let sum = 0;
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  
+  for (const r of reviewsList) {
+    sum += r.rating;
+    const rate = Math.min(5, Math.max(1, Math.round(r.rating)));
+    distribution[rate] = (distribution[rate] || 0) + 1;
+  }
+  
+  const total = reviewsList.length;
+  const average = total > 0 ? parseFloat((sum / total).toFixed(1)) : 0.0;
+  
+  const distributionPercentage = {};
+  for (let i = 1; i <= 5; i++) {
+    distributionPercentage[i] = total > 0 ? parseFloat(((distribution[i] / total) * 100).toFixed(0)) : 0;
+  }
+
+  return json({
+    productId,
+    average,
+    total,
+    distribution: distributionPercentage,
+    reviews: reviewsList
+  });
+}
+
+async function handleGetAdminReviews(request, env) {
+  try {
+    await requireAdmin(request, env);
+    const reviews = await env.DB.prepare(`
+      SELECT f.id, f.order_id, f.rating, f.comment, f.created_at, 
+             u.email, u.full_name, p.name as product_name, p.image_url as product_image
+      FROM feedback f
+      LEFT JOIN users u ON f.user_id = u.id
+      LEFT JOIN products p ON f.product_id = p.id
+      ORDER BY f.created_at DESC
+    `).all();
+
+    return json({ reviews: reviews.results || [] });
+  } catch (err) {
+    if (err.status) {
+      return jsonError(err.message, err.status);
+    }
+    throw err;
+  }
+}
+
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // Street Styles Handlers
@@ -785,12 +1462,33 @@ async function handleDeleteStyle(id, request, env) {
 // ════════════════════════════════════════════════════════════════════════════
 
 async function handleGetVersion(env) {
+  const defaultVersion = { version: '1.0.2', build: 2, apk_url: '', changelog: 'Initial release' };
   try {
     const obj = await env.R2.get('version.json');
-    if (!obj) return json({ version: '1.0.2', build: 2, apk_url: '', changelog: 'Initial release' });
-    return json(JSON.parse(await obj.text()));
+    if (!obj) {
+      return new Response(JSON.stringify(defaultVersion), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      });
+    }
+    return new Response(await obj.text(), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
+      }
+    });
   } catch {
-    return json({ version: '1.0.2', build: 2, apk_url: '', changelog: 'Initial release' });
+    return new Response(JSON.stringify(defaultVersion), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
+      }
+    });
   }
 }
 
@@ -808,9 +1506,7 @@ async function handleSetVersion(request, env) {
 
   // Trigger push notification on app update
   const title = 'New Update Available! 🚀';
-  const body = data.changelog
-    ? `Version ${data.version || ''} is live: ${data.changelog}`
-    : `A new version ${data.version || ''} of Zanny Collection is available. Update now!`;
+  const body = `A new version of Zanny Collection is available. Update now to get the latest features and enhancements!`;
   const route = '/profile';
   await broadcastFcmNotification(env, title, body, route);
 
@@ -1056,6 +1752,39 @@ async function getFcmAccessToken(env) {
   return data.access_token;
 }
 
+// Send a push notification to a single user by their user ID
+async function sendFcmToUser(env, userId, title, body, route) {
+  if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) return;
+  try {
+    const user = await env.DB.prepare("SELECT fcm_token FROM users WHERE id = ?").bind(userId).first();
+    if (!user || !user.fcm_token) return;
+    const accessToken = await getFcmAccessToken(env);
+    await fetch(`https://fcm.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/messages:send`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: {
+          token: user.fcm_token,
+          notification: { title, body },
+          data: { route: route || '/orders' },
+          android: {
+            priority: 'high',
+            notification: {
+              channel_id: 'zanny_high_importance',
+              notification_priority: 'PRIORITY_MAX',
+              sound: 'default',
+              default_sound: true,
+              default_vibrate_timings: true
+            }
+          }
+        }
+      })
+    });
+  } catch (e) {
+    console.error(`sendFcmToUser(${userId}) failed: ${e.message}`);
+  }
+}
+
 async function broadcastFcmNotification(env, title, body, route) {
   if (!env.FIREBASE_PROJECT_ID || !env.FIREBASE_CLIENT_EMAIL || !env.FIREBASE_PRIVATE_KEY) {
     console.info("⚠️ FCM credentials not fully configured, skipping push notification.");
@@ -1067,7 +1796,7 @@ async function broadcastFcmNotification(env, title, body, route) {
 
     // Get all registered FCM tokens
     const { results } = await env.DB.prepare(
-      "SELECT fcm_token FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ''"
+      "SELECT DISTINCT fcm_token FROM users WHERE fcm_token IS NOT NULL AND fcm_token != ''"
     ).all();
 
     if (results.length === 0) {
@@ -1085,7 +1814,17 @@ async function broadcastFcmNotification(env, title, body, route) {
           message: {
             token: row.fcm_token,
             notification: { title, body },
-            data: { route: route || "/orders" }
+            data: { route: route || "/orders" },
+            android: {
+              priority: "high",
+              notification: {
+                channel_id: "zanny_high_importance",
+                notification_priority: "PRIORITY_MAX",
+                sound: "default",
+                default_sound: true,
+                default_vibrate_timings: true
+              }
+            }
           }
         })
       }).catch(err => {
@@ -1100,5 +1839,18 @@ async function broadcastFcmNotification(env, title, body, route) {
     console.error(`FCM Broadcast failed: ${e.message}`);
     return { success: false, error: e.message };
   }
+}
+
+async function handleSendAdvertisement(request, env) {
+  await requireAdmin(request, env);
+  const data = await request.json().catch(() => ({}));
+  const title = data.title;
+  const body = data.body;
+  const route = data.route || '/profile';
+  if (!title || !body) {
+    return json({ error: 'Title and body are required' }, 400);
+  }
+  const result = await broadcastFcmNotification(env, title, body, route);
+  return json({ success: true, count: result.count || 0 });
 }
 
