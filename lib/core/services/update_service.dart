@@ -10,6 +10,7 @@ import '../cloudflare/api_client.dart';
 import '../theme/app_colors.dart';
 import '../../shared/providers/auth_provider.dart';
 import '../../shared/widgets/custom_feedback.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Version info fetched from Cloudflare R2 via the Worker API.
 class AppVersionInfo {
@@ -79,6 +80,20 @@ class UpdateService {
       final info = AppVersionInfo.fromJson(resp.data as Map<String, dynamic>);
 
       if (info.build > currentBuild && info.apkUrl.isNotEmpty) {
+        // If it's an automatic startup check, check if we already enqueued this build to avoid loops
+        if (!showFeedback) {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            final enqueuedBuild = prefs.getInt('enqueued_update_build') ?? 0;
+            if (enqueuedBuild == info.build) {
+              debugPrint('ℹ️ Update for build ${info.build} was already enqueued. Skipping auto-prompt.');
+              return false;
+            }
+          } catch (e) {
+            debugPrint('⚠️ Error checking enqueued build: $e');
+          }
+        }
+
         if (!context.mounted) return false;
         _showUpdateDialog(context, info);
         return true;
@@ -110,6 +125,14 @@ class UpdateService {
     AppVersionInfo info,
     ValueNotifier<double> progressNotifier,
   ) async {
+    // Save to SharedPreferences that we started download/install for this build
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('enqueued_update_build', info.build);
+    } catch (e) {
+      debugPrint('⚠️ Failed to save enqueued update build: $e');
+    }
+
     if (Platform.isAndroid) {
       final success = await _channel.invokeMethod<bool>('downloadAndInstallApkInBackground', {
         'apkUrl': info.apkUrl,
