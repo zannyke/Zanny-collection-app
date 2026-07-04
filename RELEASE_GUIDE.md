@@ -63,5 +63,12 @@ npx wrangler r2 object put zanny-images/zanny_collection_v1.0.6_YYYYMMDD_HHMM.ap
 npx wrangler r2 object put zanny-images/version.json --file=version.json --remote
 ```
 
+### Step 7: Commit Changes to Git
+Once the update is live and tested, commit all source code changes to the Git repository to record history logs and prevent code divergence:
+```powershell
+git add .
+git commit -m "feat: release version 1.0.6 build 18 with [key features]"
+```
+
 ---
 *Note: Any installed client app will automatically see the update notification on the next check. Since the signature is unified, tapping "Update Now" will download the APK and update the app seamlessly in place.*

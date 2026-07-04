@@ -38,8 +38,8 @@ class UpdateService {
 
   static const _channel = MethodChannel('com.example.zanny_collection/install');
 
-  static const String currentVersion = '1.0.25';
-  static const int currentBuild = 44;
+  static const String currentVersion = '1.0.33';
+  static const int currentBuild = 52;
 
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
@@ -202,13 +202,9 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
 
   @override
   Widget build(BuildContext context) {
-    final user = ref.watch(currentUserProvider);
-    final isAdmin = user?.isAdmin == true;
 
-    // Simplified non-technical explanation for regular users, technical logs for admin
-    final displayChangelog = isAdmin
-        ? widget.info.changelog
-        : "This update contains performance improvements, minor bug fixes, and stability updates to provide a smoother shopping experience.";
+
+
 
     return AnimatedBuilder(
       animation: _entryController,
@@ -339,33 +335,18 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               Text(
-                "WHAT'S NEW",
+                widget.info.changelog.isNotEmpty
+                    ? widget.info.changelog
+                    : "Update to get the latest features and improvements.",
                 style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.black54, // Muted grey heading
-                  letterSpacing: 1.5,
+                  color: Colors.black87,
+                  fontSize: 13,
+                  height: 1.4,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-                ),
-                child: Text(
-                  displayChangelog,
-                  style: GoogleFonts.inter(
-                    color: Colors.black87,
-                    fontSize: 12,
-                    height: 1.5,
-                  ),
-                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 28),
               if (_downloading) ...[

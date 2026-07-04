@@ -67,6 +67,7 @@ graph TD
     C --> D[Confirm APK Public URL is accessible]
     D --> E[Send PUT /api/version payload to Worker]
     E --> F[FCM Notification sent to users]
+    F --> G[Commit changes to Git for tracking]
 ```
 
 ### Step 4.1: Rename the APK
@@ -97,6 +98,13 @@ node scripts/publish_r2.js
 The Worker will:
 1. Receive the payload and save `version.json` in the R2 bucket.
 2. Send a Firebase FCM broadcast notification to all registered phones.
+
+### Step 4.5: Commit Changes to Git
+After the APK build is successfully pushed to Cloudflare R2 and published, always commit all code modifications to Git. This ensures clear traceability, maintains clean version logs, and prevents conflicts or duplicate updates:
+```powershell
+git add .
+git commit -m "feat: release version 1.0.xx build yy with [key features]"
+```
 
 ---
 

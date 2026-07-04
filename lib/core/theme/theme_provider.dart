@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  ThemeModeNotifier() : super(ThemeMode.system) {
+  ThemeModeNotifier() : super(ThemeMode.light) {
     _loadTheme();
   }
 
@@ -16,7 +16,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
       if (savedMode != null) {
         state = ThemeMode.values.firstWhere(
           (e) => e.name == savedMode,
-          orElse: () => ThemeMode.system,
+          orElse: () => ThemeMode.light,
         );
       }
     } catch (_) {

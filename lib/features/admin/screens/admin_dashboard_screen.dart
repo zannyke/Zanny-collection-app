@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_player/video_player.dart';
 import '../repositories/admin_repository.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/cloudflare/api_client.dart';
@@ -34,6 +35,21 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   int _currentTab = 0; // 0: Products, 1: Fashion Styles, 2: Orders, 3: Analytics, 4: Adverts
   bool _sendingAdvert = false;
   bool _updatingBanner = false;
+  String _selectedRouteOption = '/profile';
+  final List<Map<String, String>> _targetRoutes = [
+    {'name': 'Profile / Settings', 'route': '/profile'},
+    {'name': 'Home / Slideshow', 'route': '/'},
+    {'name': 'Collections / Shop', 'route': '/collections'},
+    {'name': 'My Orders', 'route': '/orders'},
+    {'name': 'Wishlist', 'route': '/wishlist'},
+    {'name': 'Shopping Cart', 'route': '/cart'},
+    {'name': 'Custom Route...', 'route': 'custom'},
+  ];
+
+  bool _isVideo(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('.mp4') || lower.contains('.mov') || lower.contains('.3gp') || lower.contains('.mkv');
+  }
 
   late final PageController _pageController;
   late final ScrollController _tabScrollController;
@@ -764,18 +780,48 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 
                 Text('Target Screen Route (Deep Link)', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
                 const SizedBox(height: 6),
-                TextField(
-                  controller: _advRouteController,
+                DropdownButtonFormField<String>(
+                  value: _selectedRouteOption,
                   style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13.5),
                   decoration: InputDecoration(
-                    hintText: 'e.g. /profile, /orders, /product/123',
-                    hintStyle: TextStyle(color: theme.colorScheme.secondary.withValues(alpha: 0.5)),
                     filled: true,
                     fillColor: theme.colorScheme.outline.withValues(alpha: 0.1),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   ),
+                  dropdownColor: theme.colorScheme.surface,
+                  items: _targetRoutes.map((opt) {
+                    return DropdownMenuItem<String>(
+                      value: opt['route'],
+                      child: Text(opt['name']!, style: TextStyle(color: theme.colorScheme.onSurface)),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _selectedRouteOption = val;
+                        if (val != 'custom') {
+                          _advRouteController.text = val;
+                        }
+                      });
+                    }
+                  },
                 ),
+                if (_selectedRouteOption == 'custom') ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _advRouteController,
+                    style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 13.5),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. /product/123, /orders',
+                      hintStyle: TextStyle(color: theme.colorScheme.secondary.withValues(alpha: 0.5)),
+                      filled: true,
+                      fillColor: theme.colorScheme.outline.withValues(alpha: 0.1),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 
                 SizedBox(
@@ -805,8 +851,43 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
 
   Future<void> _pickAndAddBannerSlide(BuildContext context, ThemeData theme, List<String> currentSlides) async {
     final messenger = ScaffoldMessenger.of(context);
+    final option = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.image, color: theme.colorScheme.primary),
+              title: const Text('Add Image Slide'),
+              onTap: () => Navigator.pop(ctx, 'image'),
+            ),
+            ListTile(
+              leading: Icon(Icons.video_library, color: theme.colorScheme.primary),
+              title: const Text('Add Video Slide (Muted Ad)'),
+              onTap: () => Navigator.pop(ctx, 'video'),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+
+    if (option == null) return;
+    if (!mounted) return;
+
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    XFile? picked;
+    if (option == 'image') {
+      picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    } else {
+      picked = await picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(seconds: 30));
+    }
+
     if (picked == null) return;
 
     final file = File(picked.path);
@@ -911,7 +992,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Upload up to 10 images to cycle concurrently as a sliding carousel on the top of the homepage.',
+          'Upload up to 10 images or videos to cycle concurrently as a sliding carousel on the top of the homepage.',
           style: GoogleFonts.inter(color: theme.colorScheme.secondary, fontSize: 12.5, height: 1.4),
         ),
         const SizedBox(height: 24),
@@ -949,6 +1030,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                     scrollDirection: Axis.horizontal,
                     itemCount: bannerSlides.length,
                     itemBuilder: (context, index) {
+                      final url = bannerSlides[index];
+                      final isVideo = _isVideo(url);
                       return Container(
                         margin: const EdgeInsets.only(right: 14),
                         width: 120,
@@ -963,17 +1046,42 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                                   border: Border.all(color: theme.colorScheme.outline.withValues(alpha: 0.2)),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: CachedNetworkImage(
-                                  imageUrl: bannerSlides[index],
-                                  fit: BoxFit.cover,
-                                  placeholder: (ctx, url) => Container(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
-                                  errorWidget: (ctx, url, err) => Container(
-                                    color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.broken_image_outlined, size: 24),
+                                child: isVideo
+                                    ? _AdminVideoPreview(videoUrl: url)
+                                    : CachedNetworkImage(
+                                        imageUrl: url,
+                                        fit: BoxFit.cover,
+                                        placeholder: (ctx, url) => Container(color: theme.colorScheme.outline.withValues(alpha: 0.1)),
+                                        errorWidget: (ctx, url, err) => Container(
+                                          color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                                          child: const Icon(Icons.broken_image_outlined, size: 24),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            if (isVideo)
+                              Positioned(
+                                left: 6,
+                                top: 6,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.6),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.videocam, color: Colors.white, size: 10),
+                                      SizedBox(width: 2),
+                                      Text(
+                                        'VIDEO',
+                                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                            ),
                             Positioned(
                               top: 6,
                               right: 6,
@@ -1015,7 +1123,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   child: _updatingBanner
                       ? const ShimmerPlaceholder(width: 20, height: 20, borderRadius: 10)
                       : Text(
-                          bannerSlides.length >= 10 ? 'MAXIMUM SLIDES REACHED' : 'ADD NEW SLIDE IMAGE',
+                          bannerSlides.length >= 10 ? 'MAXIMUM SLIDES REACHED' : 'ADD NEW SLIDE (IMAGE/VIDEO)',
                           style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 1),
                         ),
                 ),
@@ -1906,3 +2014,65 @@ class _AdminOrderCardState extends ConsumerState<_AdminOrderCard> {
     );
   }
 }
+
+class _AdminVideoPreview extends StatefulWidget {
+  final String videoUrl;
+  const _AdminVideoPreview({required this.videoUrl});
+
+  @override
+  State<_AdminVideoPreview> createState() => _AdminVideoPreviewState();
+}
+
+class _AdminVideoPreviewState extends State<_AdminVideoPreview> {
+  VideoPlayerController? _controller;
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        if (mounted) {
+          setState(() {
+            _initialized = true;
+          });
+          _controller?.setLooping(true);
+          _controller?.setVolume(0);
+          _controller?.play();
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_initialized && _controller != null) {
+      return SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: _controller!.value.size.width,
+            height: _controller!.value.size.height,
+            child: VideoPlayer(_controller!),
+          ),
+        ),
+      );
+    }
+    return const Center(
+      child: SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
+        ),
+      ),
+    );
+  }
+}
+

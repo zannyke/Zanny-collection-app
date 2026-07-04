@@ -105,14 +105,16 @@ class AuthNotifier extends Notifier<AuthState> {
     } on DioException catch (e) {
       final msg = _extractError(e);
       state = state.copyWith(isLoading: false, error: msg);
+      rethrow;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: 'Sign in failed. Please try again.');
+      rethrow;
     }
   }
 
   // ── Sign Up ──────────────────────────────────────────────────────────────
 
-  Future<void> signUpWithEmail({
+  Future<bool> signUpWithEmail({
     required String email,
     required String password,
     required String fullName,
@@ -124,6 +126,36 @@ class AuthNotifier extends Notifier<AuthState> {
         'password': password,
         'full_name': fullName,
       });
+      if (resp.data != null && resp.data['token'] == null) {
+        state = state.copyWith(isLoading: false);
+        return false; // Email verification required
+      }
+      final token = resp.data['token'] as String;
+      final user = AppUser.fromJson(resp.data['user'] as Map<String, dynamic>);
+      await ApiClient.saveToken(token);
+      await _cacheUser(user);
+      state = AuthState(user: user);
+      await NotificationService.saveTokenForCurrentUser();
+      return true; // Verified and signed in
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false, error: _extractError(e));
+      rethrow;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Registration failed. Please try again.');
+      rethrow;
+    }
+  }
+
+  Future<void> verifyEmail({
+    required String email,
+    required String code,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final resp = await _api.post('/api/auth/verify-email', data: {
+        'email': email.trim().toLowerCase(),
+        'code': code.trim(),
+      });
       final token = resp.data['token'] as String;
       final user = AppUser.fromJson(resp.data['user'] as Map<String, dynamic>);
       await ApiClient.saveToken(token);
@@ -132,8 +164,10 @@ class AuthNotifier extends Notifier<AuthState> {
       await NotificationService.saveTokenForCurrentUser();
     } on DioException catch (e) {
       state = state.copyWith(isLoading: false, error: _extractError(e));
+      rethrow;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Registration failed. Please try again.');
+      state = state.copyWith(isLoading: false, error: 'Email verification failed.');
+      rethrow;
     }
   }
 
@@ -197,7 +231,45 @@ class AuthNotifier extends Notifier<AuthState> {
       state = state.copyWith(isLoading: false, error: _extractError(e));
       rethrow;
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Failed to request reset link.');
+      state = state.copyWith(isLoading: false, error: 'Failed to request reset code.');
+      rethrow;
+    }
+  }
+
+  Future<void> confirmResetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _api.post('/api/auth/reset-password', data: {
+        'email': email.trim().toLowerCase(),
+        'code': code.trim(),
+        'password': newPassword.trim(),
+      });
+      state = state.copyWith(isLoading: false);
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false, error: _extractError(e));
+      rethrow;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Failed to reset password.');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteAccount(String currentPassword) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      await _api.delete('/api/auth/profile', data: {
+        'password': currentPassword,
+      });
+      await signOut();
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false, error: _extractError(e));
+      rethrow;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Failed to delete account.');
       rethrow;
     }
   }
@@ -208,7 +280,7 @@ class AuthNotifier extends Notifier<AuthState> {
       if (data is Map && data.containsKey('error')) return data['error'] as String;
     } catch (_) {}
     if (e.response?.statusCode == 409) return 'Email already registered.';
-    if (e.response?.statusCode == 401) return 'Invalid email or password.';
+    if (e.response?.statusCode == 401) return 'Invalid credentials.';
     return 'Network error. Please try again.';
   }
 }

@@ -10,6 +10,7 @@ import '../../../shared/providers/product_provider.dart';
 import '../../../shared/providers/street_styles_provider.dart';
 import '../../../shared/widgets/product_card.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../shared/widgets/shimmer_widgets.dart';
 import '../../../core/services/update_service.dart';
@@ -205,6 +206,7 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
   late PageController _pageController;
   int _currentPage = 0;
   Timer? _timer;
+  final Map<String, VideoPlayerController> _controllers = {};
 
   @override
   void initState() {
@@ -212,17 +214,73 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
     _pageController = PageController(initialPage: 0);
   }
 
-  void _startTimer(int pageCount) {
+  bool _isVideo(String url) {
+    final lower = url.toLowerCase();
+    return lower.contains('.mp4') || lower.contains('.mov') || lower.contains('.3gp') || lower.contains('.mkv');
+  }
+
+  void _initializeVideo(String url, List<String> slides) {
+    if (_controllers.containsKey(url)) return;
+    try {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url))
+        ..initialize().then((_) {
+          if (mounted) {
+            setState(() {});
+            if (slides.indexOf(url) == _currentPage) {
+              _scheduleNextSlide(slides);
+            }
+          }
+        })
+        ..setLooping(true)
+        ..setVolume(0.0) // Silent
+        ..play();
+      _controllers[url] = controller;
+    } catch (e) {
+      debugPrint('⚠️ Failed to initialize video player: $e');
+    }
+  }
+
+  int? _timerTargetIndex;
+
+  void _scheduleNextSlide(List<String> slides) {
+    if (slides.length <= 1) {
+      _timer?.cancel();
+      _timerTargetIndex = null;
+      return;
+    }
+    if (_timerTargetIndex == _currentPage && _timer?.isActive == true) {
+      return;
+    }
     _timer?.cancel();
-    if (pageCount <= 1) return;
-    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _timerTargetIndex = _currentPage;
+
+    Duration slideDuration = const Duration(seconds: 5);
+    final currentUrl = slides[_currentPage];
+    if (_isVideo(currentUrl)) {
+      final controller = _controllers[currentUrl];
+      if (controller != null && controller.value.isInitialized) {
+        final videoDuration = controller.value.duration;
+        if (videoDuration.inSeconds > 0) {
+          slideDuration = videoDuration;
+          if (slideDuration.inSeconds > 30) {
+            slideDuration = const Duration(seconds: 30);
+          } else if (slideDuration.inSeconds < 3) {
+            slideDuration = const Duration(seconds: 3);
+          }
+        }
+      }
+    }
+
+    _timer = Timer(slideDuration, () {
       if (!mounted) return;
-      final nextPage = (_currentPage + 1) % pageCount;
+      final nextPage = (_currentPage + 1) % slides.length;
       _pageController.animateToPage(
         nextPage,
         duration: const Duration(milliseconds: 800),
         curve: Curves.easeInOutCubic,
-      );
+      ).then((_) {
+        _scheduleNextSlide(slides);
+      });
     });
   }
 
@@ -230,6 +288,10 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
   void dispose() {
     _timer?.cancel();
     _pageController.dispose();
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    _controllers.clear();
     super.dispose();
   }
 
@@ -238,9 +300,16 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
     final slides = ref.watch(bannerImageProvider);
     final screenHeight = MediaQuery.of(context).size.height;
     
+    // Pre-initialize video controllers for any video slides
+    for (final url in slides) {
+      if (_isVideo(url)) {
+        _initializeVideo(url, slides);
+      }
+    }
+
     // Start or reset timer based on current slide count
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startTimer(slides.length);
+      _scheduleNextSlide(slides);
     });
 
     return Padding(
@@ -257,7 +326,7 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Sliding banner images
+              // Sliding banner images / videos
               PageView.builder(
                 controller: _pageController,
                 onPageChanged: (index) {
@@ -267,8 +336,31 @@ class _HeroBannerState extends ConsumerState<_HeroBanner> {
                 },
                 itemCount: slides.length,
                 itemBuilder: (context, index) {
+                  final url = slides[index];
+                  if (_isVideo(url)) {
+                    final controller = _controllers[url];
+                    if (controller != null && controller.value.isInitialized) {
+                      return SizedBox.expand(
+                        child: FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: controller.value.size.width,
+                            height: controller.value.size.height,
+                            child: VideoPlayer(controller),
+                          ),
+                        ),
+                      );
+                    } else {
+                      return Container(
+                        color: AppColors.surfaceElevated,
+                        child: const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      );
+                    }
+                  }
                   return CachedNetworkImage(
-                    imageUrl: slides[index],
+                    imageUrl: url,
                     fit: BoxFit.cover,
                     placeholder: (context, url) => Container(
                       color: AppColors.surfaceElevated,

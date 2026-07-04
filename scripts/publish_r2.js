@@ -34,7 +34,7 @@ const build = parseInt(versionMatch[2], 10);
 console.log(`Version: ${version}, Build: ${build}`);
 
 console.log("\n==> Step 3: Writing version.json locally...");
-const changelog = "Full production release: cleared sandbox testing data from database and storage. Redesigned in-app update progress with a premium double-tracked progress bar overriding layout.";
+const changelog = "This update contains interface enhancements, theme optimizations, and general performance improvements to keep your streetwear shopping experience smooth.";
 const workerUrl = "https://zanny-collection-api.zannykenya254.workers.dev";
 const versionJson = {
   version: version,

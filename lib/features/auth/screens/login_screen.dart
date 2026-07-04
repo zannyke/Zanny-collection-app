@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:dio/dio.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/widgets/animations.dart';
 import '../../../core/services/connectivity_service.dart';
@@ -199,17 +200,9 @@ if (!ref.watch(connectivityProvider)) {
     );
   }
 
-  void _submit() {
-    if (!_formKey.currentState!.validate()) return;
-    ref.read(authProvider.notifier).signInWithEmail(
-      _emailCtrl.text.trim(),
-      _passwordCtrl.text,
-    );
-  }
-
-  void _showForgotPassword() {
+  void _showEmailVerificationSheet(String email) {
     ref.read(authProvider.notifier).clearError();
-    final emailCtrl = TextEditingController(text: _emailCtrl.text);
+    final codeCtrl = TextEditingController();
     final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
@@ -230,10 +223,19 @@ if (!ref.watch(connectivityProvider)) {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Reset Password', style: GoogleFonts.playfairDisplay(fontSize: 20, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface)),
+                Text(
+                  'Verify Your Email',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 6),
-                Text("Enter your email and we'll send a reset link.",
-                    style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary)),
+                Text(
+                  "We have sent a 6-digit verification code to $email. Please enter it below to activate your account.",
+                  style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary),
+                ),
                 const SizedBox(height: 20),
                 if (authState.error != null)
                   Container(
@@ -248,43 +250,207 @@ if (!ref.watch(connectivityProvider)) {
                       children: [
                         Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
                         const SizedBox(width: 8),
-                        Expanded(child: Text(authState.error!,
-                            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.error))),
+                        Expanded(
+                          child: Text(
+                            authState.error!,
+                            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.error),
+                          ),
+                        ),
                       ],
                     ),
                   ),
                 TextField(
-                  controller: emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(hintText: 'your@email.com'),
+                  controller: codeCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                    hintText: '6-digit Code',
+                    counterText: '',
+                  ),
                 ),
                 const SizedBox(height: 20),
                 PremiumButton(
-                  text: 'SEND RESET LINK',
+                  text: 'VERIFY EMAIL',
                   isLoading: authState.isLoading,
                   onPressed: () async {
-                    if (emailCtrl.text.trim().isEmpty) {
-                      ZannyFeedback.showError(context, 'Please enter your email address');
+                    ref.read(authProvider.notifier).clearError();
+                    if (codeCtrl.text.trim().length != 6) {
+                      ZannyFeedback.showError(context, 'Please enter the 6-digit code');
                       return;
                     }
                     final routerContext = context;
                     try {
-                      await ref.read(authProvider.notifier).resetPassword(emailCtrl.text.trim());
+                      await ref.read(authProvider.notifier).verifyEmail(
+                            email: email,
+                            code: codeCtrl.text.trim(),
+                          );
                       if (sheetCtx.mounted) {
                         Navigator.pop(sheetCtx);
                       }
                       if (routerContext.mounted) {
-                        ZannyFeedback.showSuccess(routerContext, 'Reset link sent! Check your email.');
+                        ZannyFeedback.showSuccess(routerContext, 'Account verified successfully! Welcome.');
+                        routerContext.go('/profile');
                       }
-                    } catch (_) {
-                      // Error will be updated in authState.error and displayed in the sheet banner
+                    } catch (_) {}
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    try {
+      await ref.read(authProvider.notifier).signInWithEmail(
+        _emailCtrl.text.trim(),
+        _passwordCtrl.text,
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        _showEmailVerificationSheet(_emailCtrl.text.trim());
+      }
+    } catch (_) {}
+  }
+
+  void _showForgotPassword() {
+    ref.read(authProvider.notifier).clearError();
+    final emailCtrl = TextEditingController(text: _emailCtrl.text);
+    final codeCtrl = TextEditingController();
+    final newPasswordCtrl = TextEditingController();
+    final theme = Theme.of(context);
+    int step = 1;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final authState = ref.watch(authProvider);
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24, right: 24, top: 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  step == 1 ? 'Reset Password' : 'Verify Code',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  step == 1
+                      ? "Enter your email and we'll send a 6-digit verification code."
+                      : "Enter the verification code sent to ${emailCtrl.text} and your new password.",
+                  style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary),
+                ),
+                const SizedBox(height: 20),
+                if (authState.error != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                      color: theme.colorScheme.error.withValues(alpha: 0.08),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            authState.error!,
+                            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.error),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (step == 1)
+                  TextField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(hintText: 'your@email.com'),
+                  )
+                else ...[
+                  TextField(
+                    controller: codeCtrl,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    decoration: const InputDecoration(
+                      hintText: '6-digit Code',
+                      counterText: '',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: newPasswordCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(hintText: 'New Password (min. 6 characters)'),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                PremiumButton(
+                  text: step == 1 ? 'SEND CODE' : 'RESET PASSWORD',
+                  isLoading: authState.isLoading,
+                  onPressed: () async {
+                    ref.read(authProvider.notifier).clearError();
+                    if (step == 1) {
+                      if (emailCtrl.text.trim().isEmpty) {
+                        ZannyFeedback.showError(context, 'Please enter your email address');
+                        return;
+                      }
+                      try {
+                        await ref.read(authProvider.notifier).resetPassword(emailCtrl.text.trim());
+                        setSheetState(() {
+                          step = 2;
+                        });
+                      } catch (_) {}
+                    } else {
+                      if (codeCtrl.text.trim().length != 6) {
+                        ZannyFeedback.showError(context, 'Please enter the 6-digit code');
+                        return;
+                      }
+                      if (newPasswordCtrl.text.isEmpty) {
+                        ZannyFeedback.showError(context, 'Please enter a new password');
+                        return;
+                      }
+                      final routerContext = context;
+                      try {
+                        await ref.read(authProvider.notifier).confirmResetPassword(
+                              email: emailCtrl.text.trim(),
+                              code: codeCtrl.text.trim(),
+                              newPassword: newPasswordCtrl.text,
+                            );
+                        if (sheetCtx.mounted) {
+                          Navigator.pop(sheetCtx);
+                        }
+                        if (routerContext.mounted) {
+                          ZannyFeedback.showSuccess(routerContext, 'Password updated successfully! Log in now.');
+                        }
+                      } catch (_) {}
                     }
                   },
                 ),
               ],
             ),
           );
-        }
+        },
       ),
     );
   }

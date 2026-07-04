@@ -11,6 +11,7 @@ import '../../../shared/widgets/animations.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/update_service.dart';
 import '../../../shared/widgets/shimmer_placeholder.dart';
+import '../../../shared/widgets/custom_feedback.dart';
 
 
 class ProfileScreen extends ConsumerWidget {
@@ -155,7 +156,7 @@ class ProfileScreen extends ConsumerWidget {
             _MenuItem(
               icon: Icons.camera_alt_outlined,
               label: 'Follow on Instagram',
-              onTap: () => _launchURL('https://www.instagram.com/zannycollection/'),
+              onTap: () => _launchURL('https://www.instagram.com/zannycollection_/'),
             ),
             const SizedBox(height: 8),
 
@@ -176,17 +177,114 @@ class ProfileScreen extends ConsumerWidget {
             const _SectionHeader('APP UPDATES'),
             _UpdateHistoryCard(),
 
+            if (isSignedIn) ...[
+              const SizedBox(height: 16),
+              const _SectionHeader('DANGER ZONE'),
+              _MenuItem(
+                icon: Icons.delete_forever_outlined,
+                label: 'Delete Account',
+                onTap: () => _confirmAccountDeletion(context, ref),
+              ),
+            ],
+
             const SizedBox(height: 24),
 
             // Version footer
             Text(
-              'Zanny Collection v${UpdateService.currentVersion} (Build ${UpdateService.currentBuild})',
+              'Zanny Collection v${UpdateService.currentVersion}',
               style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.secondary),
             ),
             const SizedBox(height: 32),
           ],
         ),
       ),
+    );
+  }
+
+  void _confirmAccountDeletion(BuildContext context, WidgetRef ref) {
+    final passwordCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        final theme = Theme.of(context);
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final authState = ref.watch(authProvider);
+            return AlertDialog(
+              backgroundColor: theme.colorScheme.surface,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              title: Text(
+                'Delete Account',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.error,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'WARNING: Permanent deletion. This will delete all your data and logout. Enter your password to confirm:',
+                    style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  if (authState.error != null) ...[
+                    Text(
+                      authState.error!,
+                      style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.error, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter your password',
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: authState.isLoading ? null : () => Navigator.pop(dialogCtx),
+                  child: Text('Cancel', style: GoogleFonts.inter(color: theme.colorScheme.secondary)),
+                ),
+                TextButton(
+                  onPressed: authState.isLoading
+                      ? null
+                      : () async {
+                          ref.read(authProvider.notifier).clearError();
+                          if (passwordCtrl.text.trim().isEmpty) {
+                            ZannyFeedback.showError(context, 'Password is required');
+                            return;
+                          }
+                          try {
+                            await ref.read(authProvider.notifier).deleteAccount(passwordCtrl.text.trim());
+                            if (dialogCtx.mounted) {
+                              Navigator.pop(dialogCtx);
+                            }
+                            if (context.mounted) {
+                              ZannyFeedback.showSuccess(context, 'Your account has been deleted.');
+                              context.go('/login');
+                            }
+                          } catch (_) {
+                            setDialogState(() {});
+                          }
+                        },
+                  child: authState.isLoading
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(
+                          'DELETE PERMANENTLY',
+                          style: GoogleFonts.inter(color: AppColors.error, fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -288,7 +386,7 @@ class _UpdateHistoryCardState extends State<_UpdateHistoryCard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Version ${UpdateService.currentVersion} (Build ${UpdateService.currentBuild})',
+                      'Version ${UpdateService.currentVersion}',
                       style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: theme.colorScheme.onSurface),
                     ),
                     Text(

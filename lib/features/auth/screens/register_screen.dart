@@ -123,9 +123,20 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   Expanded(child: _field('LAST NAME', _lastNameCtrl, 'Last name')),
                 ],
               ),
-              const SizedBox(height: 16),
-              _field('EMAIL', _emailCtrl, 'your@email.com',
-                  keyboardType: TextInputType.emailAddress),
+              _field(
+                'EMAIL',
+                _emailCtrl,
+                'your@email.com',
+                keyboardType: TextInputType.emailAddress,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return 'Email is required';
+                  final email = v.trim().toLowerCase();
+                  if (!email.endsWith('@gmail.com') && email != 'admin@zannycollection.com') {
+                    return 'Only Gmail addresses (@gmail.com) are supported';
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
 
               // Password
@@ -255,12 +266,119 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
 
-  void _submit() {
+  void _showEmailVerificationSheet(String email) {
+    ref.read(authProvider.notifier).clearError();
+    final codeCtrl = TextEditingController();
+    final theme = Theme.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final authState = ref.watch(authProvider);
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 24, right: 24, top: 24,
+              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Verify Your Email',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "We have sent a 6-digit verification code to $email. Please enter it below to activate your account.",
+                  style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary),
+                ),
+                const SizedBox(height: 20),
+                if (authState.error != null)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.colorScheme.error.withValues(alpha: 0.5)),
+                      color: theme.colorScheme.error.withValues(alpha: 0.08),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            authState.error!,
+                            style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.error),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                TextField(
+                  controller: codeCtrl,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                    hintText: '6-digit Code',
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 20),
+                PremiumButton(
+                  text: 'VERIFY EMAIL',
+                  isLoading: authState.isLoading,
+                  onPressed: () async {
+                    ref.read(authProvider.notifier).clearError();
+                    if (codeCtrl.text.trim().length != 6) {
+                      ZannyFeedback.showError(context, 'Please enter the 6-digit code');
+                      return;
+                    }
+                    final routerContext = context;
+                    try {
+                      await ref.read(authProvider.notifier).verifyEmail(
+                            email: email,
+                            code: codeCtrl.text.trim(),
+                          );
+                      if (sheetCtx.mounted) {
+                        Navigator.pop(sheetCtx);
+                      }
+                      if (routerContext.mounted) {
+                        ZannyFeedback.showSuccess(routerContext, 'Account verified successfully! Welcome.');
+                        routerContext.go('/profile');
+                      }
+                    } catch (_) {}
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    ref.read(authProvider.notifier).signUpWithEmail(
-          email: _emailCtrl.text.trim(),
-          password: _passwordCtrl.text,
-          fullName: '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
-        );
+    try {
+      final isVerified = await ref.read(authProvider.notifier).signUpWithEmail(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+            fullName: '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
+          );
+      if (!isVerified) {
+        _showEmailVerificationSheet(_emailCtrl.text.trim());
+      }
+    } catch (_) {}
   }
 }

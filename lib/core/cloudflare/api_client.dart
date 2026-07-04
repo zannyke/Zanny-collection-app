@@ -188,6 +188,6 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
   Future<Response<T>> put<T>(String path, {dynamic data}) =>
       _dio.put<T>(path, data: data);
 
-  Future<Response<T>> delete<T>(String path) =>
-      _dio.delete<T>(path);
+  Future<Response<T>> delete<T>(String path, {dynamic data}) =>
+      _dio.delete<T>(path, data: data);
 }

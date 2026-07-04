@@ -51,12 +51,16 @@ export default {
         response = json({ error: 'Storage connection failed: Cloudflare R2 binding is missing.' }, 500);
       } else if (path === '/api/auth/signup' && method === 'POST') {
         response = await handleSignup(request, env);
+      } else if (path === '/api/auth/verify-email' && method === 'POST') {
+        response = await handleVerifyEmail(request, env);
       } else if (path === '/api/auth/signin' && method === 'POST') {
         response = await handleSignin(request, env);
       } else if (path === '/api/auth/profile' && method === 'GET') {
         response = await handleGetProfile(request, env);
       } else if (path === '/api/auth/profile' && method === 'PUT') {
         response = await handleUpdateProfile(request, env);
+      } else if (path === '/api/auth/profile' && method === 'DELETE') {
+        response = await handleDeleteProfile(request, env);
       } else if (path === '/api/auth/fcm-token' && method === 'POST') {
         response = await handleFcmToken(request, env);
       } else if (path === '/api/auth/forgot-password' && method === 'POST') {
@@ -328,8 +332,40 @@ async function handleSignup(request, env) {
   if (!email || !password) return jsonError('Email and password are required', 400);
   const em = email.trim().toLowerCase();
 
-  const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(em).first();
-  if (existing) return jsonError('Email already registered', 409);
+  // Validate that only Gmail addresses are allowed to register (excluding admin)
+  if (!em.endsWith('@gmail.com') && em !== 'admin@zannycollection.com') {
+    return jsonError('Only Gmail addresses (@gmail.com) are supported for registration', 400);
+  }
+
+  const existing = await env.DB.prepare('SELECT id, is_verified FROM users WHERE email = ?').bind(em).first();
+  if (existing) {
+    if (existing.is_verified === 1) {
+      return jsonError('Email already registered', 409);
+    } else {
+      // User signed up but did not verify. We can resend code instead of throwing 409.
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await env.DB.prepare('INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)')
+        .bind(em, code, expiresAt)
+        .run();
+
+      const name = full_name || 'Valued Customer';
+      const subject = "Verify Your Zanny Collection Account";
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+          <h2 style="color: #000000; border-bottom: 2px solid #000000; padding-bottom: 10px; font-weight: 800; letter-spacing: 0.5px;">Account Verification</h2>
+          <p>Hello ${name},</p>
+          <p>Welcome back! Please use the following 6-digit verification code to activate your Zanny Collection account:</p>
+          <p style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+            <span style="background-color: #f3f4f6; color: #000000; padding: 14px 28px; border-radius: 8px; font-size: 26px; font-weight: 900; letter-spacing: 6px; border: 1px solid #e5e7eb; display: inline-block;">${code}</span>
+          </p>
+          <p>This code is valid for 15 minutes. If you did not request this, you can ignore this email.</p>
+        </div>
+      `;
+      await sendResendEmail(env, em, subject, html);
+      return json({ success: true, verified: false, email: em, message: 'Verification code resent successfully.' });
+    }
+  }
 
   const id = crypto.randomUUID();
   const hashObj = await hashPassword(password);
@@ -339,23 +375,89 @@ async function handleSignup(request, env) {
   const last_name = parts.slice(1).join(' ') || '';
 
   const isAdmin = em === 'admin@zannycollection.com';
+  
+  // Insert with is_verified = 0 (except admin which is pre-verified)
+  const isVerified = isAdmin ? 1 : 0;
   await env.DB.prepare(
-    'INSERT INTO users (id, email, password_hash, salt, first_name, last_name, role, is_verified, full_name, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)'
-  ).bind(id, em, hashObj.hash, hashObj.salt, first_name, last_name, isAdmin ? 'admin' : 'customer', full_name || '', isAdmin ? 1 : 0).run();
+    'INSERT INTO users (id, email, password_hash, salt, first_name, last_name, role, is_verified, full_name, is_admin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).bind(id, em, hashObj.hash, hashObj.salt, first_name, last_name, isAdmin ? 'admin' : 'customer', isVerified, full_name || '', isAdmin ? 1 : 0).run();
 
+  if (!isAdmin) {
+    // Generate and send verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await env.DB.prepare('INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)')
+      .bind(em, code, expiresAt)
+      .run();
+
+    const name = full_name || 'Valued Customer';
+    const subject = "Verify Your Zanny Collection Account";
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+        <h2 style="color: #000000; border-bottom: 2px solid #000000; padding-bottom: 10px; font-weight: 800; letter-spacing: 0.5px;">Account Verification</h2>
+        <p>Hello ${name},</p>
+        <p>Thank you for registering with Zanny Collection. Please use the following 6-digit verification code to activate your account:</p>
+        <p style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+          <span style="background-color: #f3f4f6; color: #000000; padding: 14px 28px; border-radius: 8px; font-size: 26px; font-weight: 900; letter-spacing: 6px; border: 1px solid #e5e7eb; display: inline-block;">${code}</span>
+        </p>
+        <p>This code is valid for 15 minutes.</p>
+      </div>
+    `;
+    await sendResendEmail(env, em, subject, html);
+    return json({ success: true, verified: false, email: em, message: 'Verification code sent.' });
+  }
+
+  // Pre-verified admin fallback login token
   const token = await createJwt(
     { sub: id, email: em, is_admin: isAdmin, exp: Math.floor(Date.now() / 1000) + 30 * 86400 },
     env.JWT_SECRET
   );
+  return json({ token, user: { id, email: em, full_name: full_name || '', is_admin: isAdmin } }, 201);
+}
+
+async function handleVerifyEmail(request, env) {
+  const { email, code } = await request.json().catch(() => ({}));
+  if (!email || !code) return jsonError('Email and code are required', 400);
+  const em = email.trim().toLowerCase();
+
+  const reset = await env.DB.prepare('SELECT * FROM password_resets WHERE email = ? AND token = ?').bind(em, code.trim()).first();
+  if (!reset) return jsonError('Invalid verification code', 400);
+
+  if (new Date(reset.expires_at) < new Date()) {
+    await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(em).run();
+    return jsonError('Verification code has expired', 400);
+  }
+
+  // Set user as verified
+  await env.DB.prepare('UPDATE users SET is_verified = 1 WHERE email = ?').bind(em).run();
+  await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(em).run();
+
+  const user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(em).first();
+  const isAdmin = user.is_admin === 1 || user.role === 'admin' || user.email === 'admin@zannycollection.com';
+  const token = await createJwt(
+    { sub: user.id, email: user.email, is_admin: isAdmin, exp: Math.floor(Date.now() / 1000) + 30 * 86400 },
+    env.JWT_SECRET
+  );
+
   console.log(JSON.stringify({
     timestamp: new Date().toISOString(),
-    event: "USER_SIGNUP",
-    user_id: id,
-    email: em,
-    is_admin: isAdmin,
+    event: "USER_EMAIL_VERIFIED",
+    user_id: user.id,
+    email: user.email,
     status: "success"
   }));
-  return json({ token, user: { id, email: em, full_name: full_name || '', is_admin: isAdmin } }, 201);
+
+  return json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || '',
+      phone: user.phone || user.phone_number || '',
+      avatar_url: user.avatar_url || '',
+      is_admin: isAdmin
+    }
+  });
 }
 
 async function handleSignin(request, env) {
@@ -369,6 +471,32 @@ async function handleSignin(request, env) {
 
   const valid = await verifyPassword(password, user.password_hash, user.salt);
   if (!valid) return jsonError('Invalid email or password', 401);
+
+  // Enforce email verification (excluding admin account)
+  if (user.is_verified !== 1 && user.email !== 'admin@zannycollection.com') {
+    // Resend a new verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await env.DB.prepare('INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)')
+      .bind(em, code, expiresAt)
+      .run();
+
+    const name = user.full_name || user.first_name || 'Valued Customer';
+    const subject = "Verify Your Zanny Collection Account";
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+        <h2 style="color: #000000; border-bottom: 2px solid #000000; padding-bottom: 10px; font-weight: 800; letter-spacing: 0.5px;">Account Verification</h2>
+        <p>Hello ${name},</p>
+        <p>Please use the following 6-digit verification code to verify your email address and activate your Zanny Collection account:</p>
+        <p style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+          <span style="background-color: #f3f4f6; color: #000000; padding: 14px 28px; border-radius: 8px; font-size: 26px; font-weight: 900; letter-spacing: 6px; border: 1px solid #e5e7eb; display: inline-block;">${code}</span>
+        </p>
+        <p>This code is valid for 15 minutes.</p>
+      </div>
+    `;
+    await sendResendEmail(env, em, subject, html);
+    return jsonError('Please verify your email address. A verification code has been sent.', 403);
+  }
 
   const isAdmin = user.is_admin === 1 || user.role === 'admin' || user.email === 'admin@zannycollection.com';
   if (user.email === 'admin@zannycollection.com' && user.is_admin !== 1) {
@@ -433,6 +561,30 @@ async function handleUpdateProfile(request, env) {
   return json({ success: true });
 }
 
+async function handleDeleteProfile(request, env) {
+  const payload = await requireUser(request, env);
+  const { password } = await request.json().catch(() => ({}));
+  if (!password) return jsonError('Password is required to confirm deletion', 400);
+
+  const user = await env.DB.prepare('SELECT password_hash, salt FROM users WHERE id = ?').bind(payload.sub).first();
+  if (!user) return jsonError('User not found', 404);
+
+  const isValid = await verifyPassword(password, user.password_hash, user.salt);
+  if (!isValid) return jsonError('Incorrect password. Account deletion aborted.', 401);
+
+  // Permanently delete user record
+  await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(payload.sub).run();
+  
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "USER_DELETED_ACCOUNT",
+    user_id: payload.sub,
+    status: "success"
+  }));
+
+  return json({ success: true, message: 'Account deleted permanently.' });
+}
+
 async function handleFcmToken(request, env) {
   const payload = await requireUser(request, env);
   const { token } = await request.json().catch(() => ({}));
@@ -451,33 +603,32 @@ async function handleForgotPassword(request, env) {
   const user = await env.DB.prepare('SELECT id, full_name, first_name FROM users WHERE email = ?').bind(em).first();
   if (!user) {
     // Return success to prevent email enumeration (security best practice)
-    return json({ success: true, message: 'If the email exists, a reset link will be sent.' });
+    return json({ success: true, message: 'If the email exists, a verification code will be sent.' });
   }
 
-  // 2. Generate secure token
-  const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour expiry
+  // 2. Generate secure 6-digit verification code
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutes expiry
 
-  // 3. Store token in DB
+  // 3. Store code in DB
   await env.DB.prepare('INSERT OR REPLACE INTO password_resets (email, token, expires_at) VALUES (?, ?, ?)')
-    .bind(em, token, expiresAt)
+    .bind(em, code, expiresAt)
     .run();
 
   // 4. Send email
   const name = user.full_name || user.first_name || 'Valued Customer';
-  const resetLink = `https://zannycollection.com/reset-password?token=${token}`;
   
-  const subject = "Reset Your Zanny Collection Password";
+  const subject = "Your Password Verification Code";
   const html = `
     <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
-      <h2 style="color: #8e24aa; border-bottom: 2px solid #8e24aa; padding-bottom: 10px;">Password Reset Request</h2>
+      <h2 style="color: #000000; border-bottom: 2px solid #000000; padding-bottom: 10px; font-weight: 800; letter-spacing: 0.5px;">Verification Code</h2>
       <p>Hello ${name},</p>
-      <p>We received a request to reset your password for your Zanny Collection account. Click the button below to choose a new password:</p>
+      <p>We received a request to reset the password for your Zanny Collection account. Please use the following 6-digit verification code to proceed:</p>
       <p style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
-        <a href="${resetLink}" style="background-color: #8e24aa; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">RESET PASSWORD</a>
+        <span style="background-color: #f3f4f6; color: #000000; padding: 14px 28px; border-radius: 8px; font-size: 26px; font-weight: 900; letter-spacing: 6px; border: 1px solid #e5e7eb; display: inline-block;">${code}</span>
       </p>
-      <p>This link is valid for the next 60 minutes. If you did not request a password reset, you can safely ignore this email.</p>
-      <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+      <p>This code is valid for the next 15 minutes. If you did not request this, you can safely ignore this email.</p>
+      <p style="color: #666; font-size: 11px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
         Zanny Collection. All rights reserved.
       </p>
     </div>
@@ -492,22 +643,23 @@ async function handleForgotPassword(request, env) {
     status: "success"
   }));
 
-  return json({ success: true, message: 'Reset email sent successfully.' });
+  return json({ success: true, message: 'Verification code sent successfully.' });
 }
 
 async function handleResetPassword(request, env) {
-  const { token, password } = await request.json().catch(() => ({}));
-  if (!token || !password) return jsonError('Token and password are required', 400);
+  const { email, code, password } = await request.json().catch(() => ({}));
+  if (!email || !code || !password) return jsonError('Email, code, and password are required', 400);
   if (password.length < 6) return jsonError('Password must be at least 6 characters long', 400);
+  const em = email.trim().toLowerCase();
 
-  // 1. Verify token
-  const reset = await env.DB.prepare('SELECT * FROM password_resets WHERE token = ?').bind(token).first();
-  if (!reset) return jsonError('Invalid or expired reset token', 400);
+  // 1. Verify token/code
+  const reset = await env.DB.prepare('SELECT * FROM password_resets WHERE email = ? AND token = ?').bind(em, code.trim()).first();
+  if (!reset) return jsonError('Invalid verification code or email', 400);
 
   // Check expiration
   if (new Date(reset.expires_at) < new Date()) {
-    await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(reset.email).run();
-    return jsonError('Reset token has expired', 400);
+    await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(em).run();
+    return jsonError('Verification code has expired', 400);
   }
 
   // 2. Hash new password
@@ -515,16 +667,16 @@ async function handleResetPassword(request, env) {
 
   // 3. Update user password
   await env.DB.prepare('UPDATE users SET password_hash = ?, salt = ? WHERE email = ?')
-    .bind(hashObj.hash, hashObj.salt, reset.email)
+    .bind(hashObj.hash, hashObj.salt, em)
     .run();
 
   // 4. Delete the token
-  await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(reset.email).run();
+  await env.DB.prepare('DELETE FROM password_resets WHERE email = ?').bind(em).run();
 
   console.log(JSON.stringify({
     timestamp: new Date().toISOString(),
     event: "PASSWORD_RESET_COMPLETED",
-    email: reset.email,
+    email: em,
     status: "success"
   }));
 
@@ -1407,6 +1559,34 @@ async function handlePostFeedback(request, env) {
     rating: rating,
     status: "success"
   }));
+
+  // Send Thank You Email to customer
+  try {
+    const user = await env.DB.prepare('SELECT email, full_name FROM users WHERE id = ?').bind(userId).first();
+    if (user && user.email) {
+      const customerEmail = user.email;
+      const customerName = user.full_name || 'Valued Customer';
+      const subject = 'Thank You for Your Feedback! - Zanny Collection';
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+          <h2 style="color: #8e24aa; border-bottom: 2px solid #8e24aa; padding-bottom: 10px;">Thank You for Your Review!</h2>
+          <p>Hello ${customerName},</p>
+          <p>Thank you so much for sharing your feedback on your recent purchase (Order <strong>#${order_id}</strong>).</p>
+          <p>We read every review to make sure we are delivering the best fashion and service in Kenya. Your feedback helps us grow and keep improving!</p>
+          <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0; font-style: italic;">
+            "&ldquo;${sanitizedComment || 'Rating: ' + rating + '/5 stars'}&rdquo;"
+          </div>
+          <p>As always, we look forward to styling you again soon.</p>
+          <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+            Zanny Collection. All rights reserved.
+          </p>
+        </div>
+      `;
+      await sendResendEmail(env, customerEmail, subject, html);
+    }
+  } catch (e) {
+    console.error("❌ Failed to send review thank-you email:", e.message);
+  }
 
   // Check if there are any remaining unreviewed items in this order
   const feedbacksResult = await env.DB.prepare(

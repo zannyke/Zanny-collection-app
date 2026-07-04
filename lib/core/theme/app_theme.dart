@@ -127,7 +127,16 @@ class AppTheme {
           letterSpacing: 2,
         ),
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
-        systemOverlayStyle: SystemUiOverlayStyle.light,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          statusBarBrightness: Brightness.dark,
+          systemStatusBarContrastEnforced: false,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.light,
+          systemNavigationBarContrastEnforced: false,
+        ),
       ),
 
       // Bottom Navigation Bar
@@ -374,7 +383,7 @@ class AppTheme {
       ),
 
       appBarTheme: AppBarTheme(
-        backgroundColor: const Color(0xFFF9F9F9),
+        backgroundColor: const Color(0xFFFFFFFF),
         foregroundColor: const Color(0xFF0A0A0A),
         elevation: 0,
         scrolledUnderElevation: 0,
@@ -386,7 +395,16 @@ class AppTheme {
           letterSpacing: 2,
         ),
         iconTheme: const IconThemeData(color: Color(0xFF0A0A0A)),
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        systemOverlayStyle: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+          systemStatusBarContrastEnforced: false,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarDividerColor: Colors.transparent,
+          systemNavigationBarIconBrightness: Brightness.dark,
+          systemNavigationBarContrastEnforced: false,
+        ),
       ),
 
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(

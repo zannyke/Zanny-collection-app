@@ -3,9 +3,9 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $workerUrl   = "https://zanny-collection-api.zannykenya254.workers.dev"
-$version     = "1.0.15"
-$build       = 34
-$changelog   = "Migrate admin review prompts, welcome alerts, package tracking, and layout shimmer skeleton stencils."
+$version     = "1.0.33"
+$build       = 52
+$changelog   = "Implement true edge-to-edge system transparent status and navigation bars, and optimize status bar notification icons."
 $adminSecret = "ZannyAdmin2024Secret"
 
 $latestApk = Get-ChildItem -Path "build/app/outputs/flutter-apk" -Filter "zanny_collection_v${version}_*.apk" | Sort-Object LastWriteTime | Select-Object -Last 1

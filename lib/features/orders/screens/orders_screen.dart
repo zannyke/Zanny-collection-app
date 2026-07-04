@@ -128,15 +128,15 @@ class _OrdersList extends ConsumerWidget {
   }
 }
 
-class _OrderCard extends StatefulWidget {
+class _OrderCard extends ConsumerStatefulWidget {
   final Order order;
   const _OrderCard({required this.order});
 
   @override
-  State<_OrderCard> createState() => _OrderCardState();
+  ConsumerState<_OrderCard> createState() => _OrderCardState();
 }
 
-class _OrderCardState extends State<_OrderCard> {
+class _OrderCardState extends ConsumerState<_OrderCard> {
   bool _isExpanded = false;
 
   @override
@@ -250,6 +250,32 @@ class _OrderCardState extends State<_OrderCard> {
                         ),
                       ],
                     ),
+                    if (order.status == 'pending') ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => _confirmCancelOrder(context, ref, order.id),
+                            icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 16),
+                            label: Text(
+                              'CANCEL ORDER',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.red,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              side: const BorderSide(color: Colors.red, width: 1),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     Center(
                       child: Icon(
@@ -375,6 +401,29 @@ class _OrderCardState extends State<_OrderCard> {
                         ),
                       ],
                     ),
+                    if (order.status == 'pending') ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Colors.red, width: 1.5),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () => _confirmCancelOrder(context, ref, order.id),
+                          child: Text(
+                            'CANCEL ORDER',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.red,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -723,6 +772,52 @@ class _OrderCardState extends State<_OrderCard> {
               fontWeight: FontWeight.w700,
               color: theme.colorScheme.onSurface,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmCancelOrder(BuildContext context, WidgetRef ref, String orderId) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        title: Text(
+          'Cancel Order',
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+        ),
+        content: const Text('Are you sure you want to cancel this order? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Keep Order', style: TextStyle(color: Theme.of(ctx).colorScheme.primary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await ref.read(ordersProvider.notifier).updateOrderStatus(orderId, 'cancelled');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Order cancelled successfully'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Failed to cancel order: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Cancel Order', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

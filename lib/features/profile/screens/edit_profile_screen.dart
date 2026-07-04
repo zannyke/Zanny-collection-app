@@ -1,11 +1,15 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../shared/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/shimmer_placeholder.dart';
+import '../../../shared/widgets/custom_feedback.dart';
+import '../../admin/repositories/admin_repository.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -20,16 +24,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   late final TextEditingController _phoneController;
   String? _avatarUrl;
   bool _isLoading = false;
+  bool _uploadingAvatar = false;
 
   final List<String> _avatarPresets = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200', // Chic
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200', // Classic
-    'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?q=80&w=200', // Streetwear
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=200', // Fashion
-    'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?q=80&w=200', // Modern
-    'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=200', // Muted
-    'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?q=80&w=200', // Minimalist
-    'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?q=80&w=200', // Vibrant
+    'https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev/avatar_male.png',
+    'https://pub-0a4117480fe8436ca1a1255ce208d231.r2.dev/avatar_female.png',
   ];
 
   @override
@@ -46,6 +45,37 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    if (pickedFile == null) return;
+
+    setState(() {
+      _uploadingAvatar = true;
+    });
+
+    try {
+      final repo = ref.read(adminRepositoryProvider);
+      final uploadedUrl = await repo.uploadProductImage(File(pickedFile.path));
+      setState(() {
+        _avatarUrl = uploadedUrl;
+      });
+      if (mounted) {
+        ZannyFeedback.showSuccess(context, 'Avatar photo uploaded successfully!');
+      }
+    } catch (e) {
+      if (mounted) {
+        ZannyFeedback.showError(context, 'Failed to upload photo: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploadingAvatar = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -117,19 +147,45 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 children: [
                   // Profile image display (only editable by selecting presets below)
                   Center(
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: theme.colorScheme.surface,
-                        border: Border.all(color: theme.colorScheme.outline, width: 0.5),
-                      ),
-                      child: ClipOval(
-                        child: (_avatarUrl != null && _avatarUrl!.startsWith('http'))
-                            ? Image.network(_avatarUrl!, fit: BoxFit.cover)
-                            : const Icon(Icons.person_outline, size: 48, color: Colors.grey),
-                      ),
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: theme.colorScheme.surface,
+                            border: Border.all(color: theme.colorScheme.outline, width: 0.5),
+                          ),
+                          child: ClipOval(
+                            child: _uploadingAvatar
+                                ? const ShimmerPlaceholder(width: 100, height: 100, borderRadius: 50)
+                                : (_avatarUrl != null && _avatarUrl!.startsWith('http'))
+                                    ? Image.network(_avatarUrl!, fit: BoxFit.cover)
+                                    : const Icon(Icons.person_outline, size: 48, color: Colors.grey),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: GestureDetector(
+                            onTap: _uploadingAvatar ? null : _pickAndUploadAvatar,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: theme.colorScheme.surface, width: 1.5),
+                              ),
+                              child: Icon(
+                                Icons.camera_alt_rounded,
+                                color: theme.colorScheme.onPrimary,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
