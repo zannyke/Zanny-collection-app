@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/product_provider.dart';
 import '../../../shared/widgets/animations.dart';

@@ -7,12 +7,10 @@ import '../../../shared/providers/auth_provider.dart';
 import '../../../shared/providers/wishlist_provider.dart';
 import '../../../shared/providers/cart_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../shared/widgets/animations.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/update_service.dart';
 import '../../../shared/widgets/shimmer_placeholder.dart';
 import '../../../shared/widgets/custom_feedback.dart';
-
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -40,7 +38,9 @@ class ProfileScreen extends ConsumerWidget {
         ],
       ),
       body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Profile Header ──────────────────────────────────────────────
             Container(
@@ -51,7 +51,7 @@ class ProfileScreen extends ConsumerWidget {
                 children: [
                   // Avatar
                   Container(
-                    width: 72, height: 72,
+                    width: 76, height: 76,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(color: theme.colorScheme.outline, width: 0.5),
@@ -79,7 +79,7 @@ class ProfileScreen extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _StatChip(Icons.favorite_outline, '$wishlistCount', 'Saved'),
-                        const SizedBox(width: 20),
+                        const SizedBox(width: 28),
                         _StatChip(Icons.shopping_bag_outlined, '${ref.watch(cartCountProvider)}', 'In Cart'),
                       ],
                     ),
@@ -90,20 +90,28 @@ class ProfileScreen extends ConsumerWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: PremiumButton(
+                          child: OutlinedButton(
                             onPressed: () => context.push('/login'),
-                            text: 'SIGN IN',
-                            type: PremiumButtonType.primary,
-                            height: 48,
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: theme.colorScheme.primary),
+                              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: Text('SIGN IN', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: theme.colorScheme.primary)),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: PremiumButton(
+                          child: ElevatedButton(
                             onPressed: () => context.push('/register'),
-                            text: 'REGISTER',
-                            type: PremiumButtonType.secondary,
-                            height: 48,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary,
+                              foregroundColor: theme.colorScheme.onPrimary,
+                              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              elevation: 0,
+                            ),
+                            child: Text('REGISTER', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1.5)),
                           ),
                         ),
                       ],
@@ -113,89 +121,138 @@ class ProfileScreen extends ConsumerWidget {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // ── Admin Menu ───────────────────────────────────────────────────
             if (isSignedIn && user?.email == 'admin@zannycollection.com') ...[
               const _SectionHeader('ADMINISTRATION'),
-              _MenuItem(
-                icon: Icons.admin_panel_settings_outlined,
-                label: 'Admin Panel',
-                onTap: () => context.push('/admin'),
-              ),
-              const SizedBox(height: 8),
+              _buildGroupCard(context, [
+                _MenuItem(
+                  icon: Icons.admin_panel_settings_outlined,
+                  label: 'Admin Panel',
+                  onTap: () => context.push('/admin'),
+                ),
+              ]),
             ],
 
             // ── Account Menu ─────────────────────────────────────────────────
             if (isSignedIn) ...[
               const _SectionHeader('ACCOUNT'),
-              _MenuItem(icon: Icons.shopping_bag_outlined, label: 'My Orders', badge: null, onTap: () => context.push('/orders')),
-              _MenuItem(icon: Icons.favorite_outline, label: 'Wishlist', badge: wishlistCount > 0 ? '$wishlistCount' : null,
-                  onTap: () => context.push('/wishlist')),
-              _MenuItem(icon: Icons.location_on_outlined, label: 'Saved Addresses', onTap: () => context.push('/saved-addresses')),
-              _MenuItem(icon: Icons.person_outline, label: 'Edit Profile', onTap: () => context.push('/edit-profile')),
-              const SizedBox(height: 8),
+              _buildGroupCard(context, [
+                _MenuItem(icon: Icons.shopping_bag_outlined, label: 'My Orders', onTap: () => context.push('/orders')),
+                _MenuItem(
+                  icon: Icons.favorite_outline, 
+                  label: 'Wishlist', 
+                  trailingText: wishlistCount > 0 ? '$wishlistCount items' : null,
+                  onTap: () => context.push('/wishlist')
+                ),
+                _MenuItem(icon: Icons.location_on_outlined, label: 'Saved Addresses', onTap: () => context.push('/saved-addresses')),
+                _MenuItem(icon: Icons.person_outline, label: 'Edit Profile', onTap: () => context.push('/edit-profile')),
+              ]),
             ],
+
+            // ── Preferences / Settings ───────────────────────────────────────
+            const _SectionHeader('PREFERENCES'),
+            _buildGroupCard(context, [
+              const _ThemeSelectorTile(),
+            ]),
 
             // ── Customer Care ────────────────────────────────────────────────
             const _SectionHeader('CUSTOMER CARE'),
-            _MenuItem(icon: Icons.help_outline, label: 'FAQs', onTap: () => context.push('/faqs')),
-            _MenuItem(icon: Icons.local_shipping_outlined, label: 'Shipping & Returns', onTap: () => context.push('/shipping')),
-            _MenuItem(icon: Icons.dry_cleaning_outlined, label: 'Care Guide', onTap: () => context.push('/care-guide')),
-            _MenuItem(icon: Icons.mail_outline, label: 'Contact Us', onTap: () => context.push('/contact')),
-            const SizedBox(height: 8),
+            _buildGroupCard(context, [
+              _MenuItem(icon: Icons.help_outline, label: 'FAQs', onTap: () => context.push('/faqs')),
+              _MenuItem(icon: Icons.local_shipping_outlined, label: 'Shipping & Returns', onTap: () => context.push('/shipping')),
+              _MenuItem(icon: Icons.dry_cleaning_outlined, label: 'Care Guide', onTap: () => context.push('/care-guide')),
+              _MenuItem(icon: Icons.mail_outline, label: 'Contact Us', onTap: () => context.push('/contact')),
+            ]),
 
             // ── About Zanny ──────────────────────────────────────────────────
             const _SectionHeader('ABOUT'),
-            _MenuItem(icon: Icons.auto_awesome_outlined, label: 'World of Zanny', onTap: () => context.push('/world-of-zanny')),
-            _MenuItem(
-              icon: Icons.language_outlined,
-              label: 'Visit Website',
-              onTap: () => _launchURL('https://zannycollection.com'),
-            ),
-            _MenuItem(
-              icon: Icons.camera_alt_outlined,
-              label: 'Follow on Instagram',
-              onTap: () => _launchURL('https://www.instagram.com/zannycollection_/'),
-            ),
-            const SizedBox(height: 8),
-
-            // ── Settings ─────────────────────────────────────────────────────
-            const _SectionHeader('SETTINGS'),
-            const _ThemeSelectorTile(),
-            const SizedBox(height: 8),
+            _buildGroupCard(context, [
+              _MenuItem(icon: Icons.auto_awesome_outlined, label: 'World of Zanny', onTap: () => context.push('/world-of-zanny')),
+              _MenuItem(
+                icon: Icons.language_outlined,
+                label: 'Visit Website',
+                onTap: () => _launchURL('https://zannycollection.com'),
+              ),
+              _MenuItem(
+                icon: Icons.camera_alt_outlined,
+                label: 'Follow on Instagram',
+                onTap: () => _launchURL('https://www.instagram.com/zannycollection_/'),
+              ),
+            ]),
 
             // ── Legal ────────────────────────────────────────────────────────
             const _SectionHeader('LEGAL'),
-            _MenuItem(icon: Icons.description_outlined, label: 'Terms of Service', onTap: () => context.push('/terms')),
-            _MenuItem(icon: Icons.privacy_tip_outlined, label: 'Privacy Policy', onTap: () => context.push('/privacy')),
-            _MenuItem(icon: Icons.cookie_outlined, label: 'Cookie Policy', onTap: () => context.push('/cookie')),
-
-            const SizedBox(height: 8),
+            _buildGroupCard(context, [
+              _MenuItem(icon: Icons.description_outlined, label: 'Terms of Service', onTap: () => context.push('/terms')),
+              _MenuItem(icon: Icons.privacy_tip_outlined, label: 'Privacy Policy', onTap: () => context.push('/privacy')),
+              _MenuItem(icon: Icons.cookie_outlined, label: 'Cookie Policy', onTap: () => context.push('/cookie')),
+            ]),
 
             // ── App Version & Updates ──────────────────────────────────
             const _SectionHeader('APP UPDATES'),
             _UpdateHistoryCard(),
 
             if (isSignedIn) ...[
-              const SizedBox(height: 16),
               const _SectionHeader('DANGER ZONE'),
-              _MenuItem(
-                icon: Icons.delete_forever_outlined,
-                label: 'Delete Account',
-                onTap: () => _confirmAccountDeletion(context, ref),
-              ),
+              _buildGroupCard(context, [
+                _MenuItem(
+                  icon: Icons.delete_forever_outlined,
+                  label: 'Delete Account',
+                  textColor: AppColors.error,
+                  iconColor: AppColors.error,
+                  onTap: () => _confirmAccountDeletion(context, ref),
+                ),
+              ]),
             ],
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
             // Version footer
-            Text(
-              'Zanny Collection v${UpdateService.currentVersion}',
-              style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.secondary),
+            Center(
+              child: Text(
+                'Zanny Collection v${UpdateService.currentVersion}',
+                style: GoogleFonts.inter(fontSize: 11, color: theme.colorScheme.secondary),
+              ),
             ),
             const SizedBox(height: 32),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupCard(BuildContext context, List<Widget> children) {
+    final theme = Theme.of(context);
+    final itemsWithDividers = <Widget>[];
+    for (int i = 0; i < children.length; i++) {
+      itemsWithDividers.add(children[i]);
+      if (i < children.length - 1) {
+        itemsWithDividers.add(
+          Divider(
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+            color: theme.colorScheme.outline.withValues(alpha: 0.08),
+          ),
+        );
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: theme.colorScheme.outline.withValues(alpha: 0.15),
+            width: 0.5,
+          ),
+        ),
+        child: Column(
+          children: itemsWithDividers,
         ),
       ),
     );
@@ -346,8 +403,6 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-// ── Update History Card ────────────────────────────────────────────────────
-
 class _UpdateHistoryCard extends StatefulWidget {
   @override
   State<_UpdateHistoryCard> createState() => _UpdateHistoryCardState();
@@ -430,17 +485,15 @@ class _UpdateHistoryCardState extends State<_UpdateHistoryCard> {
   }
 }
 
-
 class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader(this.title);
-
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
       child: Text(title,
           style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2, color: theme.colorScheme.secondary)),
     );
@@ -450,31 +503,37 @@ class _SectionHeader extends StatelessWidget {
 class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
-  final String? badge;
+  final String? trailingText;
   final VoidCallback onTap;
-  const _MenuItem({required this.icon, required this.label, required this.onTap, this.badge});
+  final Color? textColor;
+  final Color? iconColor;
+
+  const _MenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.trailingText,
+    this.textColor,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ListTile(
       dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      leading: Icon(icon, color: theme.colorScheme.secondary, size: 20),
-      title: Text(label, style: GoogleFonts.inter(fontSize: 14, color: theme.textTheme.bodyLarge?.color)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      leading: Icon(icon, color: iconColor ?? theme.colorScheme.secondary, size: 20),
+      title: Text(label, style: GoogleFonts.inter(fontSize: 14, color: textColor ?? theme.textTheme.bodyLarge?.color)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (badge != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(badge!, style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: theme.colorScheme.onPrimary)),
+          if (trailingText != null)
+            Text(
+              trailingText!,
+              style: GoogleFonts.inter(fontSize: 13, color: theme.colorScheme.secondary),
             ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
           Icon(Icons.chevron_right, color: theme.colorScheme.secondary.withValues(alpha: 0.5), size: 18),
         ],
       ),
@@ -507,24 +566,10 @@ class _ThemeSelectorTile extends ConsumerWidget {
         break;
     }
 
-    final theme = Theme.of(context);
-
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      leading: Icon(icon, color: AppColors.textSecondary, size: 20),
-      title: Text('Theme Mode', style: GoogleFonts.inter(fontSize: 14, color: theme.textTheme.bodyLarge?.color)),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            modeText,
-            style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
-          ),
-          const SizedBox(width: 8),
-          const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 18),
-        ],
-      ),
+    return _MenuItem(
+      icon: icon,
+      label: 'Theme Mode',
+      trailingText: modeText,
       onTap: () => _showThemeSelectionSheet(context, ref, themeMode),
     );
   }

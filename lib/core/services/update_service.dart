@@ -110,9 +110,21 @@ class UpdateService {
     AppVersionInfo info,
     ValueNotifier<double> progressNotifier,
   ) async {
-    final dir = Platform.isAndroid
-        ? (await getExternalStorageDirectory() ?? await getTemporaryDirectory())
-        : await getTemporaryDirectory();
+    if (Platform.isAndroid) {
+      final success = await _channel.invokeMethod<bool>('downloadAndInstallApkInBackground', {
+        'apkUrl': info.apkUrl,
+        'versionName': info.version,
+      });
+      if (success != true) {
+        throw PlatformException(
+          code: 'BACKGROUND_DOWNLOAD_FAILED',
+          message: 'Failed to enqueue update download in background.',
+        );
+      }
+      return;
+    }
+
+    final dir = await getTemporaryDirectory();
     final filePath = '${dir.path}/zanny_collection_${info.version}_b${info.build}.apk';
 
     // Clean up any existing file to prevent conflicts/corruptions
@@ -136,19 +148,9 @@ class UpdateService {
     );
 
     try {
-      if (Platform.isAndroid) {
-        final success = await _channel.invokeMethod<bool>('installApk', {'filePath': filePath});
-        if (success != true) {
-          throw PlatformException(
-            code: 'INSTALL_FAILED',
-            message: 'Native installer failed to launch or returned false',
-          );
-        }
-      } else {
-        final result = await OpenFile.open(filePath, type: 'application/vnd.android.package-archive');
-        if (result.type != ResultType.done) {
-          throw Exception('OpenFile failed: ${result.message}');
-        }
+      final result = await OpenFile.open(filePath, type: 'application/vnd.android.package-archive');
+      if (result.type != ResultType.done) {
+        throw Exception('OpenFile failed: ${result.message}');
       }
     } catch (e) {
       debugPrint('⚠️ Error launching native package installer: $e. Trying fallback...');
@@ -507,15 +509,36 @@ class _UpdateBottomSheetState extends ConsumerState<_UpdateBottomSheet> with Tic
                             return;
                           }
 
-                          setState(() => _downloading = true);
-                          try {
-                            await UpdateService.downloadAndInstall(widget.info, _progress);
-                            if (!context.mounted) return;
-                            Navigator.pop(context);
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            setState(() => _downloading = false);
-                            _showErrorDialog(context, e);
+                          if (Platform.isAndroid) {
+                            try {
+                              await UpdateService.downloadAndInstall(widget.info, _progress);
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Update download started in the background. Check your notification drawer for progress.',
+                                    style: GoogleFonts.inter(color: Colors.white, fontSize: 13),
+                                  ),
+                                  backgroundColor: Colors.black87,
+                                  duration: const Duration(seconds: 4),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              _showErrorDialog(context, e);
+                            }
+                          } else {
+                            setState(() => _downloading = true);
+                            try {
+                              await UpdateService.downloadAndInstall(widget.info, _progress);
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              setState(() => _downloading = false);
+                              _showErrorDialog(context, e);
+                            }
                           }
                         },
                         style: ElevatedButton.styleFrom(
