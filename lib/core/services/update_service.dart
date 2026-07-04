@@ -42,6 +42,8 @@ class UpdateService {
   static const String currentVersion = '1.0.35';
   static const int currentBuild = 54;
 
+  static bool _checkedThisSession = false;
+
   /// Check if the app is allowed to install packages (Android 8.0+)
   static Future<bool> checkInstallPermission() async {
     try {
@@ -72,12 +74,21 @@ class UpdateService {
     required BuildContext context,
     bool showFeedback = false,
   }) async {
+    if (!showFeedback && _checkedThisSession) {
+      debugPrint('ℹ️ Already checked for updates in this session. Skipping auto-check.');
+      return false;
+    }
+
     try {
       final resp = await ApiClient.instance.get(
         '/api/version',
         queryParameters: {'t': DateTime.now().millisecondsSinceEpoch.toString()},
       );
       final info = AppVersionInfo.fromJson(resp.data as Map<String, dynamic>);
+
+      if (!showFeedback) {
+        _checkedThisSession = true;
+      }
 
       if (info.build > currentBuild && info.apkUrl.isNotEmpty) {
         // If it's an automatic startup check, check if we already enqueued this build to avoid loops
