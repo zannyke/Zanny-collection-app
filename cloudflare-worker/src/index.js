@@ -362,7 +362,10 @@ async function handleSignup(request, env) {
           <p>This code is valid for 15 minutes. If you did not request this, you can ignore this email.</p>
         </div>
       `;
-      await sendResendEmail(env, em, subject, html);
+      const emailResult = await sendResendEmail(env, em, subject, html);
+      if (!emailResult.success) {
+        return jsonError(`Failed to send verification email: ${emailResult.error}`, 500);
+      }
       return json({ success: true, verified: false, email: em, message: 'Verification code resent successfully.' });
     }
   }
@@ -403,7 +406,10 @@ async function handleSignup(request, env) {
         <p>This code is valid for 15 minutes.</p>
       </div>
     `;
-    await sendResendEmail(env, em, subject, html);
+    const emailResult = await sendResendEmail(env, em, subject, html);
+    if (!emailResult.success) {
+      return jsonError(`Failed to send verification email: ${emailResult.error}`, 500);
+    }
     return json({ success: true, verified: false, email: em, message: 'Verification code sent.' });
   }
 
@@ -634,7 +640,10 @@ async function handleForgotPassword(request, env) {
     </div>
   `;
 
-  await sendResendEmail(env, em, subject, html);
+  const emailResult = await sendResendEmail(env, em, subject, html);
+  if (!emailResult.success) {
+    return jsonError(`Failed to send verification email: ${emailResult.error}`, 500);
+  }
   
   console.log(JSON.stringify({
     timestamp: new Date().toISOString(),
@@ -981,8 +990,9 @@ async function handleGetOrders(request, env) {
 
 async function sendResendEmail(env, to, subject, html) {
   if (!env.RESEND_API_KEY) {
-    console.warn("⚠️ env.RESEND_API_KEY not configured, skipping email.");
-    return;
+    const msg = "env.RESEND_API_KEY not configured, skipping email.";
+    console.warn("⚠️ " + msg);
+    return { success: false, error: msg };
   }
   const fromEmail = env.RESEND_SENDER || "Zanny Collection <onboarding@resend.dev>";
   try {
@@ -999,14 +1009,17 @@ async function sendResendEmail(env, to, subject, html) {
         html: html
       })
     });
-    const result = await res.json();
+    const result = await res.json().catch(() => ({}));
     if (!res.ok) {
+      const errMsg = result.message || JSON.stringify(result);
       console.error("❌ Resend error:", result);
-    } else {
-      console.log(`✅ Email sent successfully: ${result.id}`);
+      return { success: false, error: `Resend API error: ${errMsg}` };
     }
+    console.log(`✅ Email sent successfully: ${result.id}`);
+    return { success: true, id: result.id };
   } catch (e) {
     console.error("❌ Resend fetch failed:", e.message);
+    return { success: false, error: `Resend fetch failed: ${e.message}` };
   }
 }
 
