@@ -80,7 +80,7 @@ class _CollectionsScreenState extends ConsumerState<CollectionsScreen> {
     } else if (_sortApiValue == 'price_desc') {
       products.sort((a, b) => b.price.compareTo(a.price));
     } else if (_sortApiValue == 'newest') {
-      products.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      products.sort((a, b) => (b.isNew ? 1 : 0).compareTo(a.isNew ? 1 : 0));
     }
 
     // Categories list (Prepend "All Products")
