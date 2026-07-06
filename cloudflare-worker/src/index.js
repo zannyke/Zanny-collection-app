@@ -801,8 +801,6 @@ async function handleGetProducts(request, env, origin = '') {
 
   switch (sort) {
     case 'price_asc': query += ' ORDER BY price ASC'; break;
-  switch (sort) {
-    case 'price_asc': query += ' ORDER BY price ASC'; break;
     case 'price_desc': query += ' ORDER BY price DESC'; break;
     case 'newest': query += ' ORDER BY created_at DESC'; break;
     default: query += ' ORDER BY created_at DESC';
