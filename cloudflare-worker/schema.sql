@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS orders (
   mpesa_checkout_id       TEXT DEFAULT '',
   mpesa_receipt           TEXT DEFAULT '',
   mpesa_phone             TEXT DEFAULT '',
+  stripe_session_id       TEXT DEFAULT '',
   review_prompt_dismissed INTEGER DEFAULT 0,
   tracking_number         TEXT DEFAULT '',
   confirmed_at            TEXT,

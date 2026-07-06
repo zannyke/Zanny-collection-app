@@ -78,7 +78,7 @@ export default {
       } else if (path === '/api/products' && method === 'POST') {
         response = await handleCreateProduct(request, env, origin);
       } else if (/^\/api\/products\/[^/]+$/.test(path) && method === 'GET') {
-        response = await handleGetProduct(path.split('/')[3], env, origin);
+        response = await handleGetProduct(path.split('/')[3], request, env, origin);
       } else if (/^\/api\/products\/[^/]+$/.test(path) && method === 'PUT') {
         response = await handleUpdateProduct(path.split('/')[3], request, env, origin);
       } else if (/^\/api\/products\/[^/]+$/.test(path) && method === 'DELETE') {
@@ -99,6 +99,10 @@ export default {
         response = await handleGetOrders(request, env);
       } else if (path === '/api/orders' && method === 'POST') {
         response = await handleCreateOrder(request, env);
+      } else if (path === '/api/payments/create-checkout-session' && method === 'POST') {
+        response = await handleCreateStripeSession(request, env, origin);
+      } else if (path === '/api/payments/webhook' && method === 'POST') {
+        response = await handleStripeWebhook(request, env);
       } else if (/^\/api\/orders\/[^/]+\/status$/.test(path) && method === 'PUT') {
         response = await handleUpdateOrderStatus(path.split('/')[3], request, env);
       } else if (path === '/api/feedback/pending' && method === 'GET') {
@@ -696,7 +700,7 @@ async function handleResetPassword(request, env) {
 // Product Handlers
 // ════════════════════════════════════════════════════════════════════════════
 
-function parseProduct(row, env, origin = '') {
+function parseProduct(row, env, origin = '', targetCurrency = 'KES') {
   if (!row) return null;
 
   const publicUrl = env.CF_R2_PUBLIC_URL || '';
@@ -736,13 +740,19 @@ function parseProduct(row, env, origin = '') {
   const isNew = badge.toUpperCase() === 'NEW' || row.is_new === 1;
   const isSale = badge.toUpperCase() === 'SALE' || row.is_sale === 1 || (row.original_price && row.original_price > row.price);
 
+  // Convert prices if target currency is USD (assuming 1 USD = 130 KES conversion rate)
+  const isUsd = targetCurrency === 'USD';
+  const conversionRate = isUsd ? (1 / 130.0) : 1.0;
+  const price = (row.price || 0) * conversionRate;
+  const original_price = row.original_price ? (row.original_price * conversionRate) : null;
+
   return {
     id: row.id,
     name: row.name,
     subtitle: row.subtitle || row.discount_label || badge || '',
     description: row.description || '',
-    price: row.price || 0,
-    original_price: row.original_price || null,
+    price: isUsd ? Math.round(price * 100) / 100 : Math.round(price),
+    original_price: original_price ? (isUsd ? Math.round(original_price * 100) / 100 : Math.round(original_price)) : null,
     images,
     colors,
     sizes,
@@ -754,7 +764,8 @@ function parseProduct(row, env, origin = '') {
     is_active: row.is_deleted === 0 || row.is_active === 1,
     avg_rating: Math.round((row.avg_rating || 0) * 10) / 10,
     review_count: row.review_count || 0,
-    is_preorder: row.is_preorder === 1
+    is_preorder: row.is_preorder === 1,
+    currency: targetCurrency
   };
 }
 
@@ -790,23 +801,32 @@ async function handleGetProducts(request, env, origin = '') {
 
   switch (sort) {
     case 'price_asc': query += ' ORDER BY price ASC'; break;
+  switch (sort) {
+    case 'price_asc': query += ' ORDER BY price ASC'; break;
     case 'price_desc': query += ' ORDER BY price DESC'; break;
     case 'newest': query += ' ORDER BY created_at DESC'; break;
     default: query += ' ORDER BY created_at DESC';
   }
   query += ` LIMIT ${limit}`;
 
+  const country = request.headers.get('CF-IPCountry') || 'KE';
+  const targetCurrency = country.toUpperCase() === 'KE' ? 'KES' : 'USD';
+
   const stmt = env.DB.prepare(query);
   const result = params.length ? await stmt.bind(...params).all() : await stmt.all();
-  const res = json({ products: result.results.map(row => parseProduct(row, env, origin)) });
+  const res = json({ products: result.results.map(row => parseProduct(row, env, origin, targetCurrency)) });
   res.headers.set('Cache-Control', 'public, max-age=10, s-maxage=10');
   return res;
 }
 
-async function handleGetProduct(id, env, origin = '') {
+async function handleGetProduct(id, request, env, origin = '') {
   const row = await env.DB.prepare('SELECT *, ROUND(COALESCE((SELECT AVG(f.rating) FROM feedback f WHERE f.product_id = products.id), 0), 1) as avg_rating, COALESCE((SELECT COUNT(f.id) FROM feedback f WHERE f.product_id = products.id), 0) as review_count FROM products WHERE id = ? AND is_deleted = 0').bind(id).first();
   if (!row) return jsonError('Product not found', 404);
-  const res = json({ product: parseProduct(row, env, origin) });
+
+  const country = request.headers.get('CF-IPCountry') || 'KE';
+  const targetCurrency = country.toUpperCase() === 'KE' ? 'KES' : 'USD';
+
+  const res = json({ product: parseProduct(row, env, origin, targetCurrency) });
   res.headers.set('Cache-Control', 'public, max-age=10, s-maxage=10');
   return res;
 }
@@ -1114,115 +1134,117 @@ async function handleCreateOrder(request, env) {
   }
 
   // 6. Send Placement Emails (Customer Confirmation & Admin Notification)
-  const customerEmail = user ? user.email : '';
-  const adminEmail = 'zannykenya254@gmail.com';
-  
-  let itemsHtml = '';
-  for (const item of items) {
-    itemsHtml += `
-      <tr style="border-bottom: 1px solid #eee;">
-        <td style="padding: 10px 0;">
-          <strong>${item.product_name || item.product?.name || 'Product'}</strong><br/>
-          <span style="color: #666; font-size: 11px;">Size: ${item.selected_size || ''} | Color: ${item.selected_color || ''}</span>
-        </td>
-        <td style="padding: 10px 0; text-align: center;">${item.quantity}</td>
-        <td style="padding: 10px 0; text-align: right;">KES ${(item.product_price || item.product?.price || 0) * item.quantity}</td>
-      </tr>
-    `;
-  }
+  if (paymentMethod !== 'stripe') {
+    const customerEmail = user ? user.email : '';
+    const adminEmail = 'zannykenya254@gmail.com';
+    
+    let itemsHtml = '';
+    for (const item of items) {
+      itemsHtml += `
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 10px 0;">
+            <strong>${item.product_name || item.product?.name || 'Product'}</strong><br/>
+            <span style="color: #666; font-size: 11px;">Size: ${item.selected_size || ''} | Color: ${item.selected_color || ''}</span>
+          </td>
+          <td style="padding: 10px 0; text-align: center;">${item.quantity}</td>
+          <td style="padding: 10px 0; text-align: right;">KES ${(item.product_price || item.product?.price || 0) * item.quantity}</td>
+        </tr>
+      `;
+    }
 
-  // Customer Email
-  if (customerEmail) {
-    const subject = `Your Zanny Collection Order #${orderId} Confirmation`;
-    const html = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
-        <h2 style="color: #0A0A0A; border-bottom: 2px solid #0A0A0A; padding-bottom: 10px;">Order Confirmation</h2>
-        <p>Hello,</p>
-        <p>Thank you for shopping with <strong>Zanny Collection</strong>! Your order has been successfully placed.</p>
-        <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
-          <p><strong>Order ID:</strong> ${orderId}</p>
-          <p><strong>Total Amount:</strong> KES ${data.total_amount}</p>
-          <p><strong>Delivery Address:</strong> ${data.delivery_address || ''}</p>
-          <p><strong>Recipient Name:</strong> ${data.recipient_name || ''}</p>
-          <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'M-Pesa'}</p>
+    // Customer Email
+    if (customerEmail) {
+      const subject = `Your Zanny Collection Order #${orderId} Confirmation`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+          <h2 style="color: #0A0A0A; border-bottom: 2px solid #0A0A0A; padding-bottom: 10px;">Order Confirmation</h2>
+          <p>Hello,</p>
+          <p>Thank you for shopping with <strong>Zanny Collection</strong>! Your order has been successfully placed.</p>
+          <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+            <p><strong>Order ID:</strong> ${orderId}</p>
+            <p><strong>Total Amount:</strong> KES ${data.total_amount}</p>
+            <p><strong>Delivery Address:</strong> ${data.delivery_address || ''}</p>
+            <p><strong>Recipient Name:</strong> ${data.recipient_name || ''}</p>
+            <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'M-Pesa'}</p>
+          </div>
+          <h3>Items Ordered:</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+              <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                <th style="padding: 8px 0;">Item</th>
+                <th style="padding: 8px 0; text-align: center;">Qty</th>
+                <th style="padding: 8px 0; text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <p style="text-align: center; margin-top: 30px;">
+            <a href="https://zannycollection.com/orders?id=${orderId}" style="background-color: #1E88E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">TRACK ORDER</a>
+          </p>
+          <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+            Zanny Collection. All rights reserved.
+          </p>
         </div>
-        <h3>Items Ordered:</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-          <thead>
-            <tr style="border-bottom: 1px solid #ddd; text-align: left;">
-              <th style="padding: 8px 0;">Item</th>
-              <th style="padding: 8px 0; text-align: center;">Qty</th>
-              <th style="padding: 8px 0; text-align: right;">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-        <p style="text-align: center; margin-top: 30px;">
-          <a href="https://zannycollection.com/orders?id=${orderId}" style="background-color: #1E88E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">TRACK ORDER</a>
-        </p>
-        <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
-          Zanny Collection. All rights reserved.
-        </p>
-      </div>
-    `;
-    await sendResendEmail(env, customerEmail, subject, html);
-  }
+      `;
+      await sendResendEmail(env, customerEmail, subject, html);
+    }
 
-  // Admin Email
-  {
-    const subject = `New Zanny Collection Order Received: #${orderId}`;
-    const html = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
-        <h2 style="color: #d32f2f; border-bottom: 2px solid #d32f2f; padding-bottom: 10px;">New Order Received</h2>
-        <p>A new order has been placed on Zanny Collection.</p>
-        <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
-          <p><strong>Order ID:</strong> ${orderId}</p>
-          <p><strong>Customer Email:</strong> ${customerEmail || 'Guest'}</p>
-          <p><strong>Total Amount:</strong> KES ${data.total_amount}</p>
-          <p><strong>Delivery Address:</strong> ${data.delivery_address || ''}</p>
-          <p><strong>Recipient Name:</strong> ${data.recipient_name || ''}</p>
-          <p><strong>Recipient Phone:</strong> ${data.recipient_phone || ''}</p>
-          <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'M-Pesa'}</p>
+    // Admin Email
+    {
+      const subject = `New Zanny Collection Order Received: #${orderId}`;
+      const html = `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+          <h2 style="color: #d32f2f; border-bottom: 2px solid #d32f2f; padding-bottom: 10px;">New Order Received</h2>
+          <p>A new order has been placed on Zanny Collection.</p>
+          <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+            <p><strong>Order ID:</strong> ${orderId}</p>
+            <p><strong>Customer Email:</strong> ${customerEmail || 'Guest'}</p>
+            <p><strong>Total Amount:</strong> KES ${data.total_amount}</p>
+            <p><strong>Delivery Address:</strong> ${data.delivery_address || ''}</p>
+            <p><strong>Recipient Name:</strong> ${data.recipient_name || ''}</p>
+            <p><strong>Recipient Phone:</strong> ${data.recipient_phone || ''}</p>
+            <p><strong>Payment Method:</strong> ${paymentMethod === 'cod' ? 'Cash on Delivery' : 'M-Pesa'}</p>
+          </div>
+          <h3>Items Ordered:</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+              <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                <th style="padding: 8px 0;">Item</th>
+                <th style="padding: 8px 0; text-align: center;">Qty</th>
+                <th style="padding: 8px 0; text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsHtml}
+            </tbody>
+          </table>
+          <p style="text-align: center; margin-top: 30px;">
+            <a href="https://zanny-collection.pages.dev/admin" style="background-color: #0A0A0A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">GO TO ADMIN DASHBOARD</a>
+          </p>
+          <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
+            Zanny Collection. All rights reserved.
+          </p>
         </div>
-        <h3>Items Ordered:</h3>
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-          <thead>
-            <tr style="border-bottom: 1px solid #ddd; text-align: left;">
-              <th style="padding: 8px 0;">Item</th>
-              <th style="padding: 8px 0; text-align: center;">Qty</th>
-              <th style="padding: 8px 0; text-align: right;">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtml}
-          </tbody>
-        </table>
-        <p style="text-align: center; margin-top: 30px;">
-          <a href="https://zanny-collection.pages.dev/admin" style="background-color: #0A0A0A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">GO TO ADMIN DASHBOARD</a>
-        </p>
-        <p style="color: #666; font-size: 12px; text-align: center; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px;">
-          Zanny Collection. All rights reserved.
-        </p>
-      </div>
-    `;
-    await sendResendEmail(env, adminEmail, subject, html);
-  }
+      `;
+      await sendResendEmail(env, adminEmail, subject, html);
+    }
 
-  // 7. Push Notifications — admin (new order alert) + customer (confirmation)
-  try {
-    const adminUsers = await env.DB.prepare(
-      "SELECT id FROM users WHERE is_admin = 1 OR email = 'admin@zannycollection.com'"
-    ).all();
-    const adminPushPromises = (adminUsers.results || []).map(a =>
-      sendFcmToUser(env, a.id, '🛍️ New Order!', `Order #${orderId} placed for KES ${data.total_amount || 0} — tap to review.`, '/orders')
-    );
-    await Promise.all([...adminPushPromises,
-      sendFcmToUser(env, payload.sub, '✅ Order Confirmed!', `Your order #${orderId} has been placed. We'll get it ready for you!`, '/orders')
-    ]);
-  } catch (e) {
-    console.warn('FCM order placement push failed:', e.message);
+    // 7. Push Notifications — admin (new order alert) + customer (confirmation)
+    try {
+      const adminUsers = await env.DB.prepare(
+        "SELECT id FROM users WHERE is_admin = 1 OR email = 'admin@zannycollection.com'"
+      ).all();
+      const adminPushPromises = (adminUsers.results || []).map(a =>
+        sendFcmToUser(env, a.id, '🛍️ New Order!', `Order #${orderId} placed for KES ${data.total_amount || 0} — tap to review.`, '/orders')
+      );
+      await Promise.all([...adminPushPromises,
+        sendFcmToUser(env, payload.sub, '✅ Order Confirmed!', `Your order #${orderId} has been placed. We'll get it ready for you!`, '/orders')
+      ]);
+    } catch (e) {
+      console.warn('FCM order placement push failed:', e.message);
+    }
   }
 
   return json({ id: orderId, success: true }, 201);
@@ -2248,6 +2270,201 @@ async function handleUpdateSetting(key, request, env) {
     .bind(key, value)
     .run();
   return json({ success: true, key, value });
+}
+
+async function handleCreateStripeSession(request, env, origin) {
+  const payload = await requireUser(request, env);
+  const { orderId } = await request.json().catch(() => ({}));
+  if (!orderId) return jsonError('Order ID required', 400);
+
+  const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ? AND user_id = ?').bind(orderId, payload.sub).first();
+  if (!order) return jsonError('Order not found', 404);
+
+  if (order.status === 'confirmed' || order.status === 'paid') {
+    return jsonError('This order has already been paid and confirmed.', 400);
+  }
+
+  if (!env.STRIPE_SECRET_KEY) {
+    return jsonError('Stripe secret key not configured on server', 500);
+  }
+
+  // If a Stripe session ID is already cached, check if it's still open and reuse it
+  if (order.stripe_session_id) {
+    try {
+      const checkRes = await fetch(`https://api.stripe.com/v1/checkout/sessions/${order.stripe_session_id}`, {
+        headers: {
+          'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`
+        }
+      });
+      if (checkRes.ok) {
+        const sessionData = await checkRes.json();
+        if (sessionData.status === 'open') {
+          return json({ id: sessionData.id, url: sessionData.url });
+        }
+      }
+    } catch (_) {}
+  }
+
+  const items = parseJsonArray(order.items);
+  const isUsd = items.length > 0 && items[0].product?.currency === 'USD';
+  const currency = isUsd ? 'usd' : 'kes';
+  const unitAmount = Math.round(order.total_amount * 100);
+
+  const bodyParams = new URLSearchParams();
+  bodyParams.append('payment_method_types[]', 'card');
+  bodyParams.append('line_items[0][price_data][currency]', currency);
+  bodyParams.append('line_items[0][price_data][product_data][name]', `Payment for Zanny Collection Order #${orderId}`);
+  bodyParams.append('line_items[0][price_data][unit_amount]', unitAmount.toString());
+  bodyParams.append('line_items[0][price_data][product_data][description]', `Zanny Collection Purchase`);
+  bodyParams.append('line_items[0][quantity]', '1');
+  bodyParams.append('mode', 'payment');
+  bodyParams.append('success_url', `https://zannycollection.com/orders?id=${orderId}&payment=success`);
+  bodyParams.append('cancel_url', `https://zannycollection.com/checkout?payment=cancelled`);
+  bodyParams.append('metadata[order_id]', orderId);
+
+  const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: bodyParams.toString()
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    return jsonError(data.error?.message || JSON.stringify(data), 400);
+  }
+
+  // Cache the Stripe session ID in the database to prevent duplicate session generation
+  try {
+    await env.DB.prepare('UPDATE orders SET stripe_session_id = ? WHERE id = ?').bind(data.id, orderId).run();
+  } catch (_) {}
+
+  return json({ id: data.id, url: data.url });
+}
+
+async function handleStripeWebhook(request, env) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch (e) {
+    return jsonError('Invalid JSON payload', 400);
+  }
+
+  const eventType = payload.type;
+  if (eventType === 'checkout.session.completed') {
+    const session = payload.data.object;
+    const sessionId = session.id;
+    const orderId = session.metadata?.order_id;
+
+    if (!orderId) {
+      return jsonError('Order ID not found in metadata', 400);
+    }
+
+    if (!env.STRIPE_SECRET_KEY) {
+      return jsonError('Stripe secret key not configured', 500);
+    }
+
+    const res = await fetch(`https://api.stripe.com/v1/checkout/sessions/${sessionId}`, {
+      headers: {
+        'Authorization': `Bearer ${env.STRIPE_SECRET_KEY}`
+      }
+    });
+
+    if (!res.ok) {
+      return jsonError('Failed to fetch session from Stripe API', 400);
+    }
+
+    const verifiedSession = await res.json();
+    if (verifiedSession.payment_status !== 'paid') {
+      return jsonError('Payment is not paid', 400);
+    }
+
+    const order = await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(orderId).first();
+    if (!order) {
+      return jsonError('Order not found', 404);
+    }
+
+    if (order.status !== 'confirmed') {
+      await env.DB.prepare("UPDATE orders SET status = 'confirmed', confirmed_at = datetime('now') WHERE id = ?").bind(orderId).run();
+
+      const dbUser = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(order.user_id).first();
+      const customerEmail = dbUser ? dbUser.email : '';
+      const adminEmail = 'zannykenya254@gmail.com';
+
+      const items = parseJsonArray(order.items);
+      let itemsHtml = '';
+      for (const item of items) {
+        itemsHtml += `
+          <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px 0;">
+              <strong>${item.product_name || item.product?.name || 'Product'}</strong><br/>
+              <span style="color: #666; font-size: 11px;">Size: ${item.selected_size || ''} | Color: ${item.selected_color || ''}</span>
+            </td>
+            <td style="padding: 10px 0; text-align: center;">${item.quantity}</td>
+            <td style="padding: 10px 0; text-align: right;">${item.product?.currency || 'KES'} ${(item.product_price || item.product?.price || 0) * item.quantity}</td>
+          </tr>
+        `;
+      }
+
+      if (customerEmail) {
+        const subject = `Payment Confirmed: Your Zanny Collection Order #${orderId}`;
+        const html = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+            <h2 style="color: #0A0A0A; border-bottom: 2px solid #0A0A0A; padding-bottom: 10px;">Payment Confirmed</h2>
+            <p>Hello,</p>
+            <p>Thank you for shopping with <strong>Zanny Collection</strong>! We've received your payment of ${items.length > 0 ? items[0].product?.currency || 'KES' : 'KES'} ${order.total_amount}. Your order is now being processed.</p>
+            <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+              <p><strong>Order ID:</strong> ${orderId}</p>
+              <p><strong>Total Amount:</strong> ${items.length > 0 ? items[0].product?.currency || 'KES' : 'KES'} ${order.total_amount}</p>
+              <p><strong>Delivery Address:</strong> ${order.delivery_address || ''}</p>
+              <p><strong>Payment Method:</strong> Stripe (Card/Wallet)</p>
+            </div>
+            <h3>Items Ordered:</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="border-bottom: 1px solid #ddd; text-align: left;">
+                  <th style="padding: 8px 0;">Item</th>
+                  <th style="padding: 8px 0; text-align: center;">Qty</th>
+                  <th style="padding: 8px 0; text-align: right;">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+            <p style="text-align: center; margin-top: 30px;">
+              <a href="https://zannycollection.com/orders?id=${orderId}" style="background-color: #1E88E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">TRACK ORDER</a>
+            </p>
+          </div>
+        `;
+        await sendResendEmail(env, customerEmail, subject, html);
+      }
+
+      {
+        const subject = `Payment Received for Order #${orderId}`;
+        const html = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 12px; background-color: #fafafa;">
+            <h2 style="color: #2e7d32; border-bottom: 2px solid #2e7d32; padding-bottom: 10px;">Payment Confirmed</h2>
+            <p>Stripe payment has been successfully captured for Order #${orderId}.</p>
+            <div style="background-color: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+              <p><strong>Order ID:</strong> ${orderId}</p>
+              <p><strong>Customer:</strong> ${customerEmail}</p>
+              <p><strong>Total Paid:</strong> ${items.length > 0 ? items[0].product?.currency || 'KES' : 'KES'} ${order.total_amount}</p>
+            </div>
+          </div>
+        `;
+        await sendResendEmail(env, adminEmail, subject, html);
+      }
+
+      try {
+        await sendFcmToUser(env, order.user_id, '💳 Payment Received!', `Your order #${orderId} payment of ${items.length > 0 ? items[0].product?.currency || 'KES' : 'KES'} ${order.total_amount} is confirmed.`, '/orders');
+      } catch (_) {}
+    }
+  }
+
+  return json({ received: true });
 }
 
 

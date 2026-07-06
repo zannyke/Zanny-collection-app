@@ -18,6 +18,7 @@ class Product {
   final double avgRating;
   final int reviewCount;
   final bool isPreorder;
+  final String currency;
 
   const Product({
     required this.id,
@@ -36,6 +37,7 @@ class Product {
     this.avgRating = 0.0,
     this.reviewCount = 0,
     this.isPreorder = false,
+    this.currency = 'KES',
   });
 
   bool get isOnSale => originalPrice != null && originalPrice! > price;
@@ -69,6 +71,7 @@ class Product {
       avgRating: (json['avg_rating'] as num?)?.toDouble() ?? 0.0,
       reviewCount: (json['review_count'] as num?)?.toInt() ?? 0,
       isPreorder: json['is_preorder'] == true || json['is_preorder'] == 1,
+      currency: json['currency'] as String? ?? 'KES',
     );
   }
 
@@ -90,6 +93,7 @@ class Product {
       'avg_rating': avgRating,
       'review_count': reviewCount,
       'is_preorder': isPreorder,
+      'currency': currency,
     };
   }
 

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:ui' as ui;
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/cloudflare/api_client.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/providers/addresses_provider.dart';
@@ -59,7 +61,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   Future<void> _submitOrder() async {
     final cartItems = ref.read(cartProvider);
     final total = ref.read(cartTotalProvider);
-    const shipping = 250.0;
+    final currency = cartItems.isNotEmpty ? cartItems.first.product.currency : 'KES';
+    final isUsd = currency == 'USD';
+    final shipping = isUsd ? (250.0 / 130.0) : 250.0;
     final grandTotal = total + shipping;
 
     if (cartItems.isEmpty) {
@@ -117,9 +121,27 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         recipientPhone: address.phone,
         paymentMethod: _paymentMethod,
       );
+
+      if (_paymentMethod == 'stripe') {
+        // Create Stripe checkout session
+        final sessionResp = await ApiClient.instance.post('/api/payments/create-checkout-session', data: {
+          'orderId': newOrder.id,
+        });
+        final checkoutUrl = sessionResp.data['url'] as String?;
+        if (checkoutUrl != null) {
+          final uri = Uri.parse(checkoutUrl);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else {
+            throw Exception('Could not launch Stripe payment URL');
+          }
+        } else {
+          throw Exception('Failed to retrieve checkout URL from Stripe');
+        }
+      }
       
       if (mounted) {
-        ZannyFeedback.showSuccess(context, 'Order placed successfully!');
+        ZannyFeedback.showSuccess(context, _paymentMethod == 'stripe' ? 'Redirecting to payment gateway...' : 'Order placed successfully!');
         context.go('/order-success', extra: newOrder);
       }
     } catch (e) {
@@ -140,7 +162,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final theme = Theme.of(context);
     final cartItems = ref.watch(cartProvider);
     final total = ref.watch(cartTotalProvider);
-    const shipping = 250.0;
+    final currency = cartItems.isNotEmpty ? cartItems.first.product.currency : 'KES';
+    final isUsd = currency == 'USD';
+    final shipping = isUsd ? (250.0 / 130.0) : 250.0;
     final grandTotal = total + shipping;
     final defaultAddress = ref.watch(defaultAddressProvider);
 
@@ -295,14 +319,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                       Divider(color: theme.colorScheme.outline, height: 1),
                       RadioListTile<String>(
                         title: Text(
-                          'M-Pesa (Mobile Money)',
+                          'Card / Mobile Wallet (Stripe)',
                           style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: theme.colorScheme.onSurface),
                         ),
                         subtitle: Text(
-                          'Pay via STK Push popup before delivery dispatch',
+                          'Pay securely using Stripe (Visa, Mastercard, wallets)',
                           style: GoogleFonts.inter(fontSize: 12, color: theme.colorScheme.secondary),
                         ),
-                        value: 'mpesa',
+                        value: 'stripe',
                         groupValue: _paymentMethod,
                         activeColor: theme.colorScheme.primary,
                         onChanged: (val) {
@@ -367,7 +391,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               ),
                             ),
                             Text(
-                              'KES ${item.subtotal.toStringAsFixed(0)}',
+                              '${item.product.currency} ${item.subtotal.toStringAsFixed(item.product.currency == 'USD' ? 2 : 0)}',
                               style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700),
                             ),
                           ],
@@ -389,13 +413,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   ),
                   child: Column(
                     children: [
-                      _SummaryRow('Subtotal', 'KES ${total.toStringAsFixed(0)}'),
+                      _SummaryRow('Subtotal', '${currency} ${total.toStringAsFixed(isUsd ? 2 : 0)}'),
                       const SizedBox(height: 8),
-                      _SummaryRow('Shipping Fee', 'KES ${shipping.toStringAsFixed(0)}'),
+                      _SummaryRow('Shipping Fee', '${currency} ${shipping.toStringAsFixed(isUsd ? 2 : 0)}'),
                       const SizedBox(height: 12),
                       Divider(color: theme.colorScheme.outline),
                       const SizedBox(height: 12),
-                      _SummaryRow('Grand Total', 'KES ${grandTotal.toStringAsFixed(0)}', bold: true),
+                      _SummaryRow('Grand Total', '${currency} ${grandTotal.toStringAsFixed(isUsd ? 2 : 0)}', bold: true),
                     ],
                   ),
                 ),

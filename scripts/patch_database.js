@@ -47,6 +47,7 @@ const statements = [
   "ALTER TABLE orders ADD COLUMN mpesa_checkout_id TEXT DEFAULT ''",
   "ALTER TABLE orders ADD COLUMN mpesa_receipt TEXT DEFAULT ''",
   "ALTER TABLE orders ADD COLUMN mpesa_phone TEXT DEFAULT ''",
+  "ALTER TABLE orders ADD COLUMN stripe_session_id TEXT DEFAULT ''",
   "ALTER TABLE orders ADD COLUMN review_prompt_dismissed INTEGER DEFAULT 0",
   "ALTER TABLE orders ADD COLUMN tracking_number TEXT DEFAULT ''",
   "ALTER TABLE orders ADD COLUMN confirmed_at TEXT",

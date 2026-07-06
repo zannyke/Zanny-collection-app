@@ -413,7 +413,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                'KES ${product.price.toStringAsFixed(0)}',
+                                '${product.currency} ${product.price.toStringAsFixed(product.currency == 'USD' ? 2 : 0)}',
                                 style: GoogleFonts.inter(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
@@ -422,7 +422,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                               ),
                               if (product.isOnSale)
                                 Text(
-                                  'KES ${product.originalPrice!.toStringAsFixed(0)}',
+                                  '${product.currency} ${product.originalPrice!.toStringAsFixed(product.currency == 'USD' ? 2 : 0)}',
                                   style: GoogleFonts.inter(
                                     fontSize: 13,
                                     color: theme.colorScheme.secondary.withValues(alpha: 0.6),
@@ -1003,7 +1003,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                                                     ),
                                                     const SizedBox(height: 2),
                                                     Text(
-                                                      'KES ${item.price.toStringAsFixed(0)}',
+                                                      '${item.currency} ${item.price.toStringAsFixed(item.currency == 'USD' ? 2 : 0)}',
                                                       style: GoogleFonts.inter(
                                                         fontSize: 10,
                                                         fontWeight: FontWeight.w700,

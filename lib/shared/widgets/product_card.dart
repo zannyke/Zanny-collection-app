@@ -169,7 +169,7 @@ class ProductCard extends ConsumerWidget {
                       Row(
                         children: [
                           Text(
-                            'KES ${product.price.toStringAsFixed(0)}',
+                            '${product.currency} ${product.price.toStringAsFixed(product.currency == 'USD' ? 2 : 0)}',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -179,7 +179,7 @@ class ProductCard extends ConsumerWidget {
                           if (product.isOnSale) ...[
                             const SizedBox(width: 6),
                             Text(
-                              'KES ${product.originalPrice!.toStringAsFixed(0)}',
+                              '${product.currency} ${product.originalPrice!.toStringAsFixed(product.currency == 'USD' ? 2 : 0)}',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 color: theme.colorScheme.secondary,
