@@ -1,58 +1,53 @@
-# Zanny Collection — Unified Stripe & Google Sign-In Integration Guide
+# Setup Guide: How to Retrieve Stripe & Google Sign-In Credentials
 
-This guide compiles all required credentials, keys, configuration steps, and environment variables needed to finalize the Stripe payment gateway integration and Google Sign-In authentication.
-
----
-
-## ── Part 1: Stripe Payment Gateway Integration ──
-
-### Required Keys & Secrets:
-To activate Stripe Checkout and Webhooks, configure the following keys:
-
-| Key Name | Description | Source | Action Required |
-| :--- | :--- | :--- | :--- |
-| **`STRIPE_PUBLISHABLE_KEY`** | Public key used in the Flutter app to initialize the Stripe Checkout redirect. | Stripe Dashboard (Developers > API Keys) | Add to the app's `.env` configuration file |
-| **`STRIPE_SECRET_KEY`** | Secret key used securely by the Cloudflare Worker to call Stripe APIs. | Stripe Dashboard (Developers > API Keys) | Set as a Cloudflare Secret (see command below) |
-| **`STRIPE_WEBHOOK_SECRET`** | Secret token used to verify webhook event payloads from Stripe. | Stripe Dashboard (Developers > Webhooks) | Set as a Cloudflare Secret (see command below) |
-
-### Cloudflare Secrets Setup:
-Run these commands in your terminal to securely upload your Stripe keys to your Cloudflare Worker:
-```bash
-# Upload Stripe Secret Key
-npx wrangler secret put STRIPE_SECRET_KEY
-
-# Upload Stripe Webhook Signing Secret
-npx wrangler secret put STRIPE_WEBHOOK_SECRET
-```
-
-### Webhook URL Endpoint:
-Configure a webhook in your Stripe Dashboard (**Developers > Webhooks**) to listen for `checkout.session.completed` events and route them to:
-- **Webhook Endpoint URL**: `https://zanny-collection-api.zannykenya254.workers.dev/api/payments/webhook`
+This document provides step-by-step instructions on what you need to do in your Stripe and Firebase/Google consoles to generate the keys needed for our integration.
 
 ---
 
-## ── Part 2: Google Sign-In Authentication ──
+## ── Step 1: Stripe Payment Dashboard ──
 
-### Required Credentials & Configs:
-To support "Login by Google" on Android and iOS, configure the following:
+Follow these steps in your Stripe account:
 
-| Configuration Item | Description | Setup Source | Action Required |
-| :--- | :--- | :--- | :--- |
-| **`GOOGLE_CLIENT_ID`** | Web Client ID used by the Worker to verify Google ID tokens. | Google Cloud / Firebase Console | Set as a Cloudflare Secret (see command below) |
-| **SHA-1 Fingerprint** | Certificate fingerprint of your Android signing key. | Local Keystore (using keytool) | Register in Firebase Project Settings |
-| **`google-services.json`** | Android Firebase config file. | Firebase Console | Place in Flutter project under `android/app/` |
-| **`GoogleService-Info.plist`** | iOS Firebase config file. | Firebase Console | Add to your Xcode project |
+1. **Go to API Keys**:
+   - Log into your [Stripe Dashboard](https://dashboard.stripe.com/).
+   - Toggle to **Test Mode** (top right) if you want to test first, or stay in Live Mode.
+   - Go to **Developers > API Keys** in the menu.
+   - Copy the **Publishable key** (starts with `pk_`). Save this to add to your app's `.env` file.
+   - Click **Reveal live key token** (or test token) to show and copy your **Secret key** (starts with `sk_`). Save this for your Worker secret.
 
-### Cloudflare Secrets Setup:
-Run this command in your terminal to securely configure the Google Web Client ID on your Cloudflare Worker:
-```bash
-# Upload Google Client ID for backend verification
-npx wrangler secret put GOOGLE_CLIENT_ID
-```
+2. **Configure the Webhook**:
+   - Go to **Developers > Webhooks** in the menu.
+   - Click **Add endpoint**.
+   - Paste this URL as the **Endpoint URL**: 
+     `https://zanny-collection-api.zannykenya254.workers.dev/api/payments/webhook`
+   - Under **Select events to listen to**, search for and select: `checkout.session.completed`
+   - Click **Add endpoint**.
+   - Copy the **Signing secret** (starts with `whsec_`) revealed under the webhook details. Save this for your Worker secret.
 
-### Keystore SHA-1 Fingerprint Generation:
-To generate the SHA-1 fingerprint required for Android Google Sign-In, run this command in your local terminal:
-```bash
-keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
-```
-Copy the printed **SHA-1** fingerprint and paste it into the **Android app configuration** inside your Firebase project settings.
+---
+
+## ── Step 2: Google Developer / Firebase Console ──
+
+Follow these steps in your Google Developers / Firebase account:
+
+1. **Enable Google Provider in Firebase Auth**:
+   - Log into the [Firebase Console](https://console.firebase.google.com/).
+   - Open your project (**zanny-collection**).
+   - Go to **Build > Authentication** in the left menu.
+   - Click the **Sign-in method** tab.
+   - Click **Add new provider**, select **Google**, enable it, choose your support email, and click **Save**.
+   - Under the Google provider settings, copy the **Web SDK configuration Client ID** (e.g. `123456-abcdef.apps.googleusercontent.com`). Save this for your Worker secret.
+
+2. **Add SHA-1 Signature for Android**:
+   - Run this command in your local machine terminal to generate your SHA-1 key:
+     ```bash
+     keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
+     ```
+   - Copy the printed **SHA-1** fingerprint string.
+   - In the Firebase Console, go to **Project Settings** (gear icon next to Project Overview).
+   - Scroll down to **Your apps > SDK setup and configuration** under the Android App section.
+   - Click **Add fingerprint**, paste your SHA-1 signature, and click **Save**.
+   - Download the newly updated `google-services.json` file and place it inside the `android/app/` folder of your Flutter project.
+
+3. **Get iOS plist config**:
+   - Under your iOS app settings in the Firebase Project Settings, download the `GoogleService-Info.plist` file and add it to your Xcode project.
