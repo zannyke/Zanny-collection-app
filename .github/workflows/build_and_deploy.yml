@@ -49,6 +49,17 @@ jobs:
       - name: Create Dummy env file
         run: touch .env
 
+      - name: Recreate google-services.json from Secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            echo "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "Recreated google-services.json from secret."
+          else
+            echo "WARNING: GOOGLE_SERVICES_JSON secret is empty. Using local placeholder if exists."
+          fi
+
       - name: Build Android APK
         env:
           CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}
