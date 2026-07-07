@@ -12,7 +12,12 @@
           "package_name": "com.example.zanny_collection"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "962625906849-fboj1amh0k2d0pffb5m48d82kob347p7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDQ29M1P6RqxCRtn_z0VCsPNxIk94DK6yg"

@@ -93,6 +93,7 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true, error: null);
     try {
       final googleSignIn = GoogleSignIn(
+        serverClientId: '962625906849-fboj1amh0k2d0pffb5m48d82kob347p7.apps.googleusercontent.com',
         scopes: ['email', 'profile'],
       );
       final account = await googleSignIn.signIn();

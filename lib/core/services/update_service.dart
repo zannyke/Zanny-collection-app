@@ -39,8 +39,8 @@ class UpdateService {
 
   static const _channel = MethodChannel('com.example.zanny_collection/install');
 
-  static const String currentVersion = '1.0.37';
-  static const int currentBuild = 56;
+  static const String currentVersion = '1.0.38';
+  static const int currentBuild = 57;
 
   static bool _checkedThisSession = false;
 
