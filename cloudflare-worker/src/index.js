@@ -2388,6 +2388,9 @@ async function handleCreateStripeSession(request, env, origin) {
 
   const bodyParams = new URLSearchParams();
   bodyParams.append('payment_method_types[]', 'card');
+  if (currency === 'kes') {
+    bodyParams.append('payment_method_types[]', 'mpesa');
+  }
   bodyParams.append('line_items[0][price_data][currency]', currency);
   bodyParams.append('line_items[0][price_data][product_data][name]', `Payment for Zanny Collection Order #${orderId}`);
   bodyParams.append('line_items[0][price_data][unit_amount]', unitAmount.toString());

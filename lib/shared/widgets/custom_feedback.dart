@@ -164,15 +164,8 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
         ? Colors.white 
         : Colors.black87;
 
-    final isDefaultBlue = widget.themeColor.value == 0xFF42A5F5;
-    
-    final activeThemeColor = isDefaultBlue
-        ? (isDark ? Colors.white : Colors.black)
-        : widget.themeColor;
-
-    final activeGlowColor = isDefaultBlue
-        ? (isDark ? Colors.white24 : Colors.black12)
-        : widget.glowColor;
+    final activeThemeColor = isDark ? Colors.white : Colors.black;
+    final activeGlowColor = isDark ? Colors.white24 : Colors.black12;
 
     return Center(
       child: Material(
@@ -185,7 +178,7 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
             color: dialogBg,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(
-              color: isDefaultBlue ? dialogBorderColor : activeThemeColor.withValues(alpha: 0.35), 
+              color: dialogBorderColor, 
               width: 1.5,
             ),
             boxShadow: [
