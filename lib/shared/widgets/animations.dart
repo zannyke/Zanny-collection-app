@@ -221,6 +221,7 @@ class PremiumButton extends StatelessWidget {
   final bool isLoading;
   final PremiumButtonType type;
   final IconData? icon;
+  final Widget? leading;
   final double? width;
   final double height;
 
@@ -231,6 +232,7 @@ class PremiumButton extends StatelessWidget {
     this.isLoading = false,
     this.type = PremiumButtonType.primary,
     this.icon,
+    this.leading,
     this.width,
     this.height = 54.0,
   });
@@ -275,7 +277,10 @@ class PremiumButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
+          if (leading != null) ...[
+            leading!,
+            const SizedBox(width: 8),
+          ] else if (icon != null) ...[
             Icon(icon, size: 18, color: fg),
             const SizedBox(width: 8),
           ],

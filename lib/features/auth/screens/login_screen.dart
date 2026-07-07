@@ -173,7 +173,11 @@ if (!ref.watch(connectivityProvider)) {
                 },
                 isLoading: authState.isLoading,
                 type: PremiumButtonType.secondary,
-                icon: Icons.g_mobiledata,
+                leading: Image.asset(
+                  'assets/images/google_logo.png',
+                  width: 20,
+                  height: 20,
+                ),
               ),
               const SizedBox(height: 36),
 
