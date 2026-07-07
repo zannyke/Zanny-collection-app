@@ -19,9 +19,34 @@ class ZannyFeedback {
   }
 
   static void showError(BuildContext context, String message) {
+    String cleanMessage = message.trim();
+    if (cleanMessage.startsWith('Exception: ')) {
+      cleanMessage = cleanMessage.substring(11);
+    }
+    
+    final lower = cleanMessage.toLowerCase();
+    if (lower.contains('dioexception') || 
+        lower.contains('socketexception') || 
+        lower.contains('httpstatus') || 
+        lower.contains('failed host lookup') || 
+        lower.contains('connection refused') ||
+        lower.contains('connecttimeout') ||
+        lower.contains('xmlhttprequest') ||
+        lower.contains('cloudflare') ||
+        lower.contains('sqlite') ||
+        lower.contains('database') ||
+        lower.contains('unhandled exception') ||
+        lower.contains('500') ||
+        lower.contains('/api/') ||
+        lower.contains('d1_') ||
+        lower.contains('path_provider') ||
+        lower.contains('error_outline')) {
+      cleanMessage = 'We are having trouble connecting to our servers. Please check your internet connection and try again.';
+    }
+
     _show(
       context,
-      message: message,
+      message: cleanMessage,
       icon: Icons.error_outline_rounded,
       themeColor: AppColors.error,
       glowColor: AppColors.error,

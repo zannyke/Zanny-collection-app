@@ -55,6 +55,8 @@ export default {
         response = await handleVerifyEmail(request, env);
       } else if (path === '/api/auth/signin' && method === 'POST') {
         response = await handleSignin(request, env);
+      } else if (path === '/api/auth/google' && method === 'POST') {
+        response = await handleGoogleSignin(request, env);
       } else if (path === '/api/auth/profile' && method === 'GET') {
         response = await handleGetProfile(request, env);
       } else if (path === '/api/auth/profile' && method === 'PUT') {
@@ -532,6 +534,82 @@ async function handleSignin(request, env) {
     user: {
       id: user.id, email: user.email,
       full_name: user.full_name || (user.first_name ? `${user.first_name} ${user.last_name}`.trim() : ''),
+      phone: user.phone || user.phone_number || '',
+      avatar_url: user.avatar_url || '',
+      is_admin: isAdmin,
+    }
+  });
+}
+
+async function handleGoogleSignin(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const { idToken } = body;
+  if (!idToken) return jsonError('Google ID Token required', 400);
+
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  if (!res.ok) {
+    return jsonError('Invalid Google ID Token', 401);
+  }
+
+  const tokenInfo = await res.json();
+  const client_id = env.GOOGLE_CLIENT_ID;
+  if (client_id && tokenInfo.aud !== client_id) {
+    return jsonError('Unauthorized: Token audience mismatch', 401);
+  }
+
+  const email = tokenInfo.email?.trim().toLowerCase();
+  if (!email) {
+    return jsonError('Google token is missing email address', 400);
+  }
+
+  if (tokenInfo.email_verified !== 'true' && tokenInfo.email_verified !== true) {
+    return jsonError('Google email address is not verified', 401);
+  }
+
+  let user = await env.DB.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+
+  if (!user) {
+    const id = crypto.randomUUID();
+    const full_name = tokenInfo.name || '';
+    const parts = full_name.split(/\s+/);
+    const first_name = parts[0] || '';
+    const last_name = parts.slice(1).join(' ') || '';
+    const avatar_url = tokenInfo.picture || '';
+
+    await env.DB.prepare(
+      "INSERT INTO users (id, email, password_hash, salt, first_name, last_name, full_name, avatar_url, role, is_verified, auth_provider) VALUES (?, ?, '', '', ?, ?, ?, ?, 'customer', 1, 'google')"
+    ).bind(id, email, first_name, last_name, full_name, avatar_url).run();
+
+    user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+  } else {
+    if (user.is_verified !== 1 || user.auth_provider === 'local') {
+      await env.DB.prepare("UPDATE users SET is_verified = 1, auth_provider = 'google' WHERE id = ?").bind(user.id).run();
+      user.is_verified = 1;
+      user.auth_provider = 'google';
+    }
+  }
+
+  const isAdmin = user.is_admin === 1 || user.role === 'admin' || user.email === 'admin@zannycollection.com';
+  const token = await createJwt(
+    { sub: user.id, email: user.email, is_admin: isAdmin, exp: Math.floor(Date.now() / 1000) + 30 * 86400 },
+    env.JWT_SECRET
+  );
+
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "USER_GOOGLE_SIGNIN",
+    user_id: user.id,
+    email: user.email,
+    is_admin: isAdmin,
+    status: "success"
+  }));
+
+  return json({
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
       phone: user.phone || user.phone_number || '',
       avatar_url: user.avatar_url || '',
       is_admin: isAdmin,

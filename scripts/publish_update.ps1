@@ -3,9 +3,9 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $workerUrl   = "https://zanny-collection-api.zannykenya254.workers.dev"
-$version     = "1.0.33"
-$build       = 52
-$changelog   = "Implement true edge-to-edge system transparent status and navigation bars, and optimize status bar notification icons."
+$version     = "1.0.36"
+$build       = 55
+$changelog   = "Stripe payments integration for secure checkout, location-aware dynamic product pricing (KES/USD), Google Sign-In support, and premium system error handlers."
 $adminSecret = "ZannyAdmin2024Secret"
 
 $latestApk = Get-ChildItem -Path "build/app/outputs/flutter-apk" -Filter "zanny_collection_v${version}_*.apk" | Sort-Object LastWriteTime | Select-Object -Last 1

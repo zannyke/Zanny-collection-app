@@ -165,11 +165,13 @@ if (!ref.watch(connectivityProvider)) {
               // ── Google Sign In ───────────────────────────────────────────────
               PremiumButton(
                 text: 'CONTINUE WITH GOOGLE',
-                onPressed: () => ZannyFeedback.showError(
-                  context,
-                  'Google sign-in coming soon. Please use email & password.',
-                ),
-                isLoading: false,
+                onPressed: () async {
+                  ref.read(authProvider.notifier).clearError();
+                  try {
+                    await ref.read(authProvider.notifier).signInWithGoogle();
+                  } catch (_) {}
+                },
+                isLoading: authState.isLoading,
                 type: PremiumButtonType.secondary,
                 icon: Icons.g_mobiledata,
               ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../core/cloudflare/api_client.dart';
 import '../../core/services/notification_service.dart';
 import '../models/app_user.dart';
@@ -87,6 +88,42 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   // ── Sign In ──────────────────────────────────────────────────────────────
+
+  Future<void> signInWithGoogle() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+      );
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        state = state.copyWith(isLoading: false);
+        return;
+      }
+      final authDetails = await account.authentication;
+      final idToken = authDetails.idToken;
+      if (idToken == null) {
+        throw Exception('Failed to retrieve Google ID Token.');
+      }
+
+      final resp = await _api.post('/api/auth/google', data: {
+        'idToken': idToken,
+      });
+
+      final token = resp.data['token'] as String;
+      final user = AppUser.fromJson(resp.data['user'] as Map<String, dynamic>);
+      await ApiClient.saveToken(token);
+      await _cacheUser(user);
+      state = AuthState(user: user);
+      await NotificationService.saveTokenForCurrentUser();
+    } on DioException catch (e) {
+      state = state.copyWith(isLoading: false, error: _extractError(e));
+      rethrow;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: 'Google sign in failed. Please try again.');
+      rethrow;
+    }
+  }
 
   Future<void> signInWithEmail(String email, String password) async {
     state = state.copyWith(isLoading: true, error: null);
