@@ -46,6 +46,9 @@ jobs:
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           echo "App Version: $VERSION_NAME, Build: $BUILD_NUMBER"
 
+      - name: Create Dummy env file
+        run: touch .env
+
       - name: Build Android APK
         env:
           CF_WORKER_URL: ${{ secrets.CF_WORKER_URL }}

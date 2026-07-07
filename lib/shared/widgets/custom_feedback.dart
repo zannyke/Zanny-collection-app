@@ -149,6 +149,31 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final dialogBg = isDark 
+        ? const Color(0xFF141414).withValues(alpha: 0.95) 
+        : Colors.white.withValues(alpha: 0.98);
+
+    final dialogBorderColor = isDark 
+        ? const Color(0xFF2A2A2A) 
+        : Colors.grey.shade300;
+
+    final textColor = isDark 
+        ? Colors.white 
+        : Colors.black87;
+
+    final isDefaultBlue = widget.themeColor.value == 0xFF42A5F5;
+    
+    final activeThemeColor = isDefaultBlue
+        ? (isDark ? Colors.white : Colors.black)
+        : widget.themeColor;
+
+    final activeGlowColor = isDefaultBlue
+        ? (isDark ? Colors.white24 : Colors.black12)
+        : widget.glowColor;
+
     return Center(
       child: Material(
         color: Colors.transparent,
@@ -157,12 +182,15 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
           margin: const EdgeInsets.symmetric(horizontal: 24),
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F0F12).withValues(alpha: 0.85),
+            color: dialogBg,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: widget.themeColor.withValues(alpha: 0.3), width: 1.5),
+            border: Border.all(
+              color: isDefaultBlue ? dialogBorderColor : activeThemeColor.withValues(alpha: 0.35), 
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
-                color: widget.glowColor.withValues(alpha: 0.12),
+                color: activeGlowColor.withValues(alpha: 0.12),
                 blurRadius: 24,
                 spreadRadius: 2,
               ),
@@ -178,16 +206,16 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: widget.themeColor.withValues(alpha: 0.1),
+                    color: activeThemeColor.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: widget.themeColor.withValues(alpha: 0.25),
+                      color: activeThemeColor.withValues(alpha: 0.25),
                       width: 1.5,
                     ),
                   ),
                   child: Icon(
                     widget.icon,
-                    color: widget.themeColor,
+                    color: activeThemeColor,
                     size: 28,
                   ),
                 ),
@@ -198,7 +226,7 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
                 widget.message,
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
-                  color: AppColors.textPrimary,
+                  color: textColor,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   height: 1.5,
@@ -214,15 +242,15 @@ class _ZannyFeedbackDialogBodyState extends State<_ZannyFeedbackDialogBody> with
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    color: widget.themeColor.withValues(alpha: 0.08),
+                    color: activeThemeColor.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: widget.themeColor.withValues(alpha: 0.2), width: 1),
+                    border: Border.all(color: activeThemeColor.withValues(alpha: 0.15), width: 1),
                   ),
                   child: Center(
                     child: Text(
                       'OK',
                       style: GoogleFonts.inter(
-                        color: widget.themeColor,
+                        color: activeThemeColor,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1,

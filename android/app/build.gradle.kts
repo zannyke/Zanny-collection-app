@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.example.zanny_collection"
-    compileSdk = 35
+    compileSdk = 36
     // ndkVersion = flutter.ndkVersion
 
     compileOptions {
