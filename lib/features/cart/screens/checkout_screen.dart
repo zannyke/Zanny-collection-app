@@ -411,15 +411,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                     border: Border.all(color: theme.colorScheme.outline, width: 0.5),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Column(
+                   child: Column(
                     children: [
-                      _SummaryRow('Subtotal', '${currency} ${total.toStringAsFixed(isUsd ? 2 : 0)}'),
+                      _SummaryRow('Subtotal', '$currency ${total.toStringAsFixed(isUsd ? 2 : 0)}'),
                       const SizedBox(height: 8),
-                      _SummaryRow('Shipping Fee', '${currency} ${shipping.toStringAsFixed(isUsd ? 2 : 0)}'),
+                      _SummaryRow('Shipping Fee', '$currency ${shipping.toStringAsFixed(isUsd ? 2 : 0)}'),
                       const SizedBox(height: 12),
                       Divider(color: theme.colorScheme.outline),
                       const SizedBox(height: 12),
-                      _SummaryRow('Grand Total', '${currency} ${grandTotal.toStringAsFixed(isUsd ? 2 : 0)}', bold: true),
+                      _SummaryRow('Grand Total', '$currency ${grandTotal.toStringAsFixed(isUsd ? 2 : 0)}', bold: true),
                     ],
                   ),
                 ),
